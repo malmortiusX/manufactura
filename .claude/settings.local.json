@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:/laragon/www/nexttest/src/app/api/export-produccion/[id]/results\")",
+      "Bash(mkdir -p \"C:/laragon/www/nexttest/src/app/dashboard/export-production/[id]\")"
+    ]
+  }
+}

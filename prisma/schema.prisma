@@ -1,0 +1,110 @@
+// prisma/schema.prisma
+// Documentación: https://www.prisma.io/docs/concepts/database-connectors/sql-server
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// ── Tablas requeridas por Better Auth ─────────────────────────────────────────
+
+model user {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  role          String    @default("user") // "admin" | "user"
+
+  sessions      session[]
+  accounts      account[]
+}
+
+model session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+
+  userId    String
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  user      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ── Tablas de tu negocio (ejemplos, personaliza según necesites) ───────────────
+
+model ExportProduccion {
+  id                      Int      @id @default(autoincrement())
+  identificador           String   @db.Char(5)
+  nombre                  String
+  // Filtros principales
+  bodega                  String?  @db.Char(20)
+  ubicacion               String?  @db.Char(10)
+  tipoDocumento           String?  @db.Char(3)
+  tipoMovimiento          String?  @db.Char(5)
+  fecha                   DateTime @db.Date
+  // Detalle
+  tipoDoc                 String?  @db.Char(3)
+  motivo                  String?  @db.Char(2)
+  centroCostos            String?  @db.Char(15)
+  // Origen
+  origenCentroOperacion   String?  @db.Char(3)
+  origenBodega            String?  @db.Char(5)
+  origenUbicacion         String?  @db.Char(10)
+  // Destino
+  destinoCentroOperacion  String?  @db.Char(3)
+  destinoBodega           String?  @db.Char(5)
+  destinoUbicacion        String?  @db.Char(10)
+  // General
+  unidadNegocio           String?  @db.Char(20)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  department String
+  position   String
+  salary     Decimal  @db.Decimal(10, 2)
+  hiredAt    DateTime @default(now())
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
