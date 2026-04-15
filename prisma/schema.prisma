@@ -92,6 +92,51 @@ model ExportProduccion {
   // General
   unidadNegocio           String?  @db.Char(20)
 
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  opgLogs   OpgLog[]
+}
+
+// ── Consecutivos de documentos ERP ────────────────────────────────────────────
+// Un registro por tipo de documento (ej: OPG). El consecutivo se incrementa
+// dentro de una transacción para evitar duplicados en concurrencia.
+model Consecutivo {
+  id            Int      @id @default(autoincrement())
+  tipoDocumento String   @unique @db.VarChar(10) // Ej: 'OPG'
+  consecutivo   Int      @default(0)
+  updatedAt     DateTime @updatedAt
+}
+
+// ── Log de OPGs enviadas al ERP ───────────────────────────────────────────────
+// Registra cada intento de creación de una OPG en el ERP con los 3 documentos.
+// Permite reenviar el mismo XML original si el proceso falla parcialmente.
+model OpgLog {
+  id            Int      @id @default(autoincrement())
+  tipoDocumento String   @db.VarChar(10)  // Ej: 'OPG'
+  numeroOpg     Int                        // Consecutivo asignado de la tabla Consecutivo
+  numeroBache   String   @db.VarChar(20)  // Valor de TRASMIT en Fénix
+  filtroId      Int?                       // FK a ExportProduccion (nullable por si se elimina el filtro)
+  filtro        ExportProduccion? @relation(fields: [filtroId], references: [id], onDelete: SetNull)
+
+  // Estado individual de cada documento en ERP
+  // Valores posibles: 'PENDIENTE' | 'ENVIADO' | 'CONFIRMADO' | 'ERROR'
+  estadoOrdenProduccion    String @default("PENDIENTE") @db.VarChar(20)
+  estadoConsumoProduccion  String @default("PENDIENTE") @db.VarChar(20)
+  estadoEntregaProduccion  String @default("PENDIENTE") @db.VarChar(20)
+
+  // Respuesta del ERP por documento (mensaje de éxito o error)
+  respuestaOrdenProduccion    String? @db.NVarChar(Max)
+  respuestaConsumoProduccion  String? @db.NVarChar(Max)
+  respuestaEntregaProduccion  String? @db.NVarChar(Max)
+
+  // XMLs generados — se guardan para poder reenviar sin regenerar
+  xml1 String? @db.NVarChar(Max)
+  xml2 String? @db.NVarChar(Max)
+  xml3 String? @db.NVarChar(Max)
+
+  // Control de reintentos
+  intentos  Int @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
