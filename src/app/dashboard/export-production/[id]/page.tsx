@@ -73,68 +73,68 @@ function pQ(val: number, intLen: number, dec: number): string {
 }
 
 // ── Generador XML 1 ────────────────────────────────────────────────────────
-function buildXML1(filtro: Filtro, rows: ProductRow[]): string {
+function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
   const fecha = fechaYMD(filtro.fecha);
   const opening = "000000100000001001";
 
+  // Longitudes: 7+4+2+2+3+1+3+3+8+8+1+1+3+15+3+8+3+3+30+30+30+2000+3+3+8 = 2182
   const header =
-    pN(2, 7) +                              // F_NUMERO-REG
-    pN(450, 4) +                            // F_TIPO-REG
-    pN(3, 2) +                              // F_SUBTIPO-REG
-    pN(1, 2) +                              // F_VERSION-REG
-    pN(1, 3) +                              // F_CIA
-    pN(1, 1) +                              // F_CONSEC_AUTO_REG
-    pA(filtro.centroOperacion, 3) +         // f350_id_co
-    pA(filtro.tipoDocumento, 3) +           // f350_id_tipo_docto
-    pN(1, 8) +                              // f350_consec_docto
-    pA(fecha, 8) +                          // f350_id_fecha
-    pN(1, 1) +                              // f350_ind_estado
-    pN(0, 1) +                              // f350_ind_impresion
-    pN(710, 3) +                            // f350_id_clase_docto
-    pA(filtro.terceroPlanificador, 15) +    // f350_docto_alterno (tercero planificador)
-    pA(filtro.nombre, 255) +                // f350_notas
-    pA(filtro.instalacion, 2) +             // f350_id_motivo (instalación)
-    pA("", 15) +                            // f350_id_proyecto
-    pA("OPG", 3) +                          // f850_tipo_docto
-    pN(0, 8);                               // f850_consec_docto
+    pN(2,   7) +                             // F_NUMERO-REG          = 2
+    pN(850, 4) +                             // F_TIPO-REG            = 850
+    pN(0,   2) +                             // F_SUBTIPO-REG         = 00
+    pN(1,   2) +                             // F_VERSION-REG         = 01
+    pN(1,   3) +                             // F_CIA                 = 1
+    pN(0,   1) +                             // F_CONSEC_AUTO_REG     = 0 (manual)
+    pA(filtro.centroOperacion,    3) +       // f850_id_co
+    pA("OPG",                     3) +       // f850_id_tipo_docto    = OPG
+    pN(consecOpg, 8) +                       // f850_consec_docto     (SEQ_OPG)
+    pA(fecha,                     8) +       // f850_fecha            YYYYMMDD
+    pN(1,   1) +                             // f850_ind_estado       = 1
+    pN(0,   1) +                             // f850_ind_impresion    = 0
+    pN(701, 3) +                             // f850_id_clase_docto   = 701
+    pA(filtro.terceroPlanificador, 15) +     // f850_tercero_planificador
+    pA("OPG",                     3) +       // f850_id_tipo_docto_op_padre = OPG
+    pN(1,   8) +                             // f850_consec_docto_op_padre  = 1
+    pA(filtro.instalacion,        3) +       // f850_id_instalacion
+    pA("002",                     3) +       // f850_clase_op         = 002
+    pA("",                        30) +      // f850_referencia_1
+    pA("",                        30) +      // f850_referencia_2
+    pA("",                        30) +      // f850_referencia_3
+    pA(filtro.nombre,             2000) +    // f850_notas
+    pA("",                        3) +       // f850_id_co_pv
+    pA("",                        3) +       // f850_id_tipo_docto_pv
+    pN(0,   8);                              // f850_consec_docto_pv
 
+  // Longitudes por línea de producto: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+4+8+20+8+8+4+5+4+15+2000+5 = 2240
   const productLines = rows.map((row, i) => {
     const nroRegistro = i + 1;
+    const bodega = pA(filtro.bodegaItemPadre ?? row.BODEGA, 5);
     return (
-      pN(i + 3, 7) +                        // F_NUMERO-REG (3, 4, 5…)
-      pN(470, 4) +                           // F_TIPO-REG
-      pN(0, 2) +                             // F_SUBTIPO-REG
-      pN(4, 2) +                             // F_VERSION-REG
-      pN(1, 3) +                             // F_CIA
-      pA(filtro.centroOperacion, 3) +        // f470_id_co
-      pA(filtro.tipoDocumento, 3) +          // f470_id_tipo_docto
-      pN(1, 8) +                             // f470_consec_docto
-      pN(nroRegistro, 10) +                  // f470_nro_registro
-      pN(0, 7) +                             // f470_id_item_padre
-      pA(row.CODIGO_PRODUCTO, 50) +          // f470_referencia_item_padre
-      pA("", 20) +                           // f470_codigo_barras_padre
-      pA("", 20) +                           // f470_id_ext1_detalle_padre
-      pA("", 20) +                           // f470_id_ext2_detalle_padre
-      pN(0, 10) +                            // f470_numero_operacion
-      pN(0, 7) +                             // f470_id_item_comp
-      pA(row.CODIGO_PRODUCTO, 50) +          // f470_referencia_item_comp
-      pA("", 20) +                           // f470_codigo_barras_comp
-      pA("", 20) +                           // f470_id_ext1_detalle_comp
-      pA("", 20) +                           // f470_id_ext2_detalle_comp
-      pA(filtro.bodegaItemPadre ?? row.BODEGA, 5) + // f470_id_bodega (bodega item padre)
-      pA(row.UBICACION, 10) +                // Ubicación
-      pA(row.LOTE_PRODUCTO, 15) +            // Lote
-      pN(701, 3) +                           // Concepto
-      pA(filtro.instalacion, 2) +            // Motivo (instalación)
-      pA(filtro.centroOperacion, 3) +        // Centro de operación movimiento
-      pA("", 20) +                           // Unidad de negocio (vacío)
-      pA("", 15) +                           // Centro de costo (vacío)
-      pA("", 15) +                           // Proyecto (vacío)
-      pA(row.UNIDAD_PRODUCTO, 4) +           // Unidad de medida
-      pQ(Number(row.KIL), 15, 4) +           // Cantidad base (KIL)
-      pQ(Number(row.UND), 15, 4) +           // Cantidad adicional (UND)
-      pA("", 255) +                          // Notas
-      pA(row.DESCRIPCION_PRODUCTO, 2000)     // Descripción
+      pN(i + 3,  7) +                         // F_NUMERO-REG          (3, 4, 5…)
+      pN(851,    4) +                         // F_TIPO-REG            = 851
+      pN(0,      2) +                         // F_SUBTIPO-REG         = 00
+      pN(1,      2) +                         // F_VERSION-REG         = 01
+      pN(1,      3) +                         // F_CIA                 = 1
+      pA(filtro.centroOperacion,  3) +        // f851_id_co
+      pA("OPG",                   3) +        // f851_id_tipo_docto    = OPG
+      pN(consecOpg, 8) +                      // f851_consec_docto     (SEQ_OPG)
+      pN(nroRegistro,            10) +        // f851_nro_registro
+      pN(0,      7) +                         // f851_id_item          (vacío)
+      pA(row.CODIGO_PRODUCTO,    50) +        // f851_referencia_item
+      pA("",                     20) +        // f851_codigo_barras
+      pA("",                     20) +        // f851_id_ext1_detalle
+      pA("",                     20) +        // f851_id_ext2_detalle
+      pA(row.UNIDAD_PRODUCTO,     4) +        // f851_id_unidad_medida
+      pN(100,    8) +                         // f851_porc_rendimiento = 100
+      pQ(Number(row.KIL),        15, 4) +     // f851_cant_planeada_base (20 chars)
+      pA(fecha,                   8) +        // f851_fecha_inicio
+      pA(fecha,                   8) +        // f851_fecha_terminacion
+      pA("0001",                  4) +        // f851_id_metodo_lista  = 0001
+      bodega +                                // f851_id_bodega_componentes
+      pA("",                      4) +        // f851_id_metodo_ruta
+      pA(row.LOTE_PRODUCTO,      15) +        // f851_id_lote
+      pA("",                   2000) +        // f851_notas
+      bodega                                  // f851_id_bodega
     );
   });
 
@@ -324,6 +324,7 @@ export default function ExportDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
+  const [consecOpg, setConsecOpg]           = useState<number>(0);
   const [transmitting, setTransmitting]     = useState(false);
   const [transmitResult, setTransmitResult] = useState<TransmitResult | null>(null);
   const [transmitError, setTransmitError]   = useState<string | null>(null);
@@ -355,20 +356,33 @@ export default function ExportDetailPage() {
   const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
-  const xml1 = filtro ? buildXML1(filtro, rows) : "";
+  const xml1 = filtro ? buildXML1(filtro, rows, consecOpg) : "";
   const xml2 = "// Pendiente de definición";
   const xml3 = "// Pendiente de definición";
 
   const transmitir = useCallback(async (esReintento = false) => {
-    if (!bache) return;
+    if (!bache || !filtro) return;
     if (esReintento) setRetrying(true);
     else { setTransmitting(true); setTransmitResult(null); }
     setTransmitError(null);
     try {
+      // 1. Obtener el siguiente consecutivo de SEQ_OPG
+      const seqRes  = await fetch("/api/export-produccion/seq-opg", { method: "POST" });
+      const seqText = await seqRes.text();
+      if (!seqText) throw new Error("Sin respuesta al obtener SEQ_OPG");
+      const seqData = JSON.parse(seqText);
+      if (!seqRes.ok) throw new Error(seqData.error ?? "Error al obtener SEQ_OPG");
+      const nuevoConsec: number = seqData.consecOpg;
+      setConsecOpg(nuevoConsec);
+
+      // 2. Construir XML con el consecutivo real
+      const xml1Final = buildXML1(filtro, rows, nuevoConsec);
+
+      // 3. Transmitir al ERP
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bache, xml1, xml2, xml3 }),
+        body: JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final, xml2, xml3 }),
       });
       const text = await res.text();
       if (!text) throw new Error("El servidor no devolvió respuesta");
@@ -381,7 +395,7 @@ export default function ExportDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, xml1, xml2, xml3]);
+  }, [id, bache, filtro, rows, xml2, xml3]);
 
   return (
     <div className="space-y-5">
@@ -417,6 +431,16 @@ export default function ExportDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
               </svg>
               Lote {bache}
+            </div>
+          )}
+
+          {/* Badge consecutivo OPG */}
+          {consecOpg > 0 && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-xl">
+              <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              OPG #{consecOpg}
             </div>
           )}
 

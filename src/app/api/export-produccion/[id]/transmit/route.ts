@@ -123,24 +123,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const filtroId = Number(id);
 
-  const body = await req.json() as { bache: number; xml1: string; xml2: string; xml3: string };
-  const { bache, xml1, xml2, xml3 } = body;
+  const body = await req.json() as { bache: number; consecOpg: number; xml1: string; xml2: string; xml3: string };
+  const { bache, consecOpg, xml1, xml2, xml3 } = body;
 
-  if (!bache) return NextResponse.json({ error: "Falta el número de lote (bache)" }, { status: 400 });
+  if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" }, { status: 400 });
+  if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo del documento (consecOpg)" }, { status: 400 });
 
-  // 1. Incrementar consecutivo OPG de forma atómica
-  const consecutivoRec = await prisma.consecutivo.upsert({
-    where:  { tipoDocumento: "OPG" },
-    create: { tipoDocumento: "OPG", consecutivo: 1 },
-    update: { consecutivo: { increment: 1 } },
-  });
-  const numeroOpg = consecutivoRec.consecutivo;
+  // El consecutivo ya fue incrementado por /api/export-produccion/seq-opg
+  // antes de construir el XML; lo usamos directamente como numeroOpg.
+  const numeroOpg = consecOpg;
 
   // 2. Crear registro inicial en OpgLog
   const log = await prisma.opgLog.create({
     data: {
       tipoDocumento: "OPG",
       numeroOpg,
+      consecDocto:  consecOpg,
       numeroBache:  String(bache),
       filtroId,
       xml1,
