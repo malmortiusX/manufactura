@@ -77,20 +77,11 @@ model ExportProduccion {
   tipoDocumento           String?  @db.Char(3)
   tipoMovimiento          String?  @db.Char(5)
   fecha                   DateTime @db.Date
-  // Detalle
-  tipoDoc                 String?  @db.Char(3)
-  motivo                  String?  @db.Char(2)
-  centroCostos            String?  @db.Char(15)
-  // Origen
-  origenCentroOperacion   String?  @db.Char(3)
-  origenBodega            String?  @db.Char(5)
-  origenUbicacion         String?  @db.Char(10)
-  // Destino
-  destinoCentroOperacion  String?  @db.Char(3)
-  destinoBodega           String?  @db.Char(5)
-  destinoUbicacion        String?  @db.Char(10)
-  // General
-  unidadNegocio           String?  @db.Char(20)
+  // Orden de producción
+  centroOperacion         String?  @db.Char(3)
+  terceroPlanificador     String?  @db.Char(15)
+  instalacion             String?  @db.Char(3)
+  bodegaItemPadre         String?  @db.Char(5)
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt

@@ -22,16 +22,10 @@ interface Filtro {
   fecha: string;
   tipoDocumento: string | null;
   tipoMovimiento: string | null;
-  tipoDoc: string | null;
-  motivo: string | null;
-  centroCostos: string | null;
-  origenCentroOperacion: string | null;
-  origenBodega: string | null;
-  origenUbicacion: string | null;
-  destinoCentroOperacion: string | null;
-  destinoBodega: string | null;
-  destinoUbicacion: string | null;
-  unidadNegocio: string | null;
+  centroOperacion: string | null;
+  terceroPlanificador: string | null;
+  instalacion: string | null;
+  bodegaItemPadre: string | null;
 }
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";
@@ -71,63 +65,63 @@ function buildXML1(filtro: Filtro, rows: ProductRow[]): string {
   const opening = "000000100000001001";
 
   const header =
-    pN(2, 7) +
-    pN(450, 4) +
-    pN(3, 2) +
-    pN(1, 2) +
-    pN(1, 3) +
-    pN(1, 1) +
-    pA(filtro.destinoCentroOperacion, 3) +
-    pA(filtro.tipoDoc, 3) +
-    pN(1, 8) +
-    pA(fecha, 8) +
-    pN(1, 1) +
-    pN(0, 1) +
-    pN(710, 3) +
-    pA("", 15) +
-    pA(filtro.nombre, 255) +
-    pA(filtro.motivo, 2) +
-    pA("", 15) +
-    pA("OPG", 3) +
-    pN(0, 8);
+    pN(2, 7) +                              // F_NUMERO-REG
+    pN(450, 4) +                            // F_TIPO-REG
+    pN(3, 2) +                              // F_SUBTIPO-REG
+    pN(1, 2) +                              // F_VERSION-REG
+    pN(1, 3) +                              // F_CIA
+    pN(1, 1) +                              // F_CONSEC_AUTO_REG
+    pA(filtro.centroOperacion, 3) +         // f350_id_co
+    pA(filtro.tipoDocumento, 3) +           // f350_id_tipo_docto
+    pN(1, 8) +                              // f350_consec_docto
+    pA(fecha, 8) +                          // f350_id_fecha
+    pN(1, 1) +                              // f350_ind_estado
+    pN(0, 1) +                              // f350_ind_impresion
+    pN(710, 3) +                            // f350_id_clase_docto
+    pA(filtro.terceroPlanificador, 15) +    // f350_docto_alterno (tercero planificador)
+    pA(filtro.nombre, 255) +                // f350_notas
+    pA(filtro.instalacion, 2) +             // f350_id_motivo (instalación)
+    pA("", 15) +                            // f350_id_proyecto
+    pA("OPG", 3) +                          // f850_tipo_docto
+    pN(0, 8);                               // f850_consec_docto
 
   const productLines = rows.map((row, i) => {
     const nroRegistro = i + 1;
     return (
-      pN(i + 3, 7) +
-      pN(470, 4) +
-      pN(0, 2) +
-      pN(4, 2) +
-      pN(1, 3) +
-      pA(filtro.destinoCentroOperacion, 3) +
-      pA(filtro.tipoDoc, 3) +
-      pN(1, 8) +
-      pN(nroRegistro, 10) +
-      pN(0, 7) +
-      pA(row.CODIGO_PRODUCTO, 50) +
-      pA("", 20) +
-      pA("", 20) +
-      pA("", 20) +
-      pN(0, 10) +
-      pN(0, 7) +
-      pA(row.CODIGO_PRODUCTO, 50) +
-      pA("", 20) +
-      pA("", 20) +
-      pA("", 20) +
-      pA(row.BODEGA, 5) +
-      pA(row.UBICACION, 10) +
-      pA(row.LOTE_PRODUCTO, 15) +
-      pN(701, 3) +
-      pA(filtro.motivo, 2) +
-      pA(filtro.destinoCentroOperacion, 3) +
-      pA(filtro.unidadNegocio, 20) +
-      pA(filtro.centroCostos, 15) +
-      pA("", 15) +
-      pA(row.UNIDAD_PRODUCTO, 4) +
-      pQ(Number(row.KIL), 15, 4) +
-      pQ(Number(row.UND), 15, 4) +
-      pA("", 255) +
-      pA(row.DESCRIPCION_PRODUCTO, 2000)
+      pN(i + 3, 7) +                        // F_NUMERO-REG (3, 4, 5…)
+      pN(470, 4) +                           // F_TIPO-REG
+      pN(0, 2) +                             // F_SUBTIPO-REG
+      pN(4, 2) +                             // F_VERSION-REG
+      pN(1, 3) +                             // F_CIA
+      pA(filtro.centroOperacion, 3) +        // f470_id_co
+      pA(filtro.tipoDocumento, 3) +          // f470_id_tipo_docto
+      pN(1, 8) +                             // f470_consec_docto
+      pN(nroRegistro, 10) +                  // f470_nro_registro
+      pN(0, 7) +                             // f470_id_item_padre
+      pA(row.CODIGO_PRODUCTO, 50) +          // f470_referencia_item_padre
+      pA("", 20) +                           // f470_codigo_barras_padre
+      pA("", 20) +                           // f470_id_ext1_detalle_padre
+      pA("", 20) +                           // f470_id_ext2_detalle_padre
+      pN(0, 10) +                            // f470_numero_operacion
+      pN(0, 7) +                             // f470_id_item_comp
+      pA(row.CODIGO_PRODUCTO, 50) +          // f470_referencia_item_comp
+      pA("", 20) +                           // f470_codigo_barras_comp
+      pA("", 20) +                           // f470_id_ext1_detalle_comp
+      pA("", 20) +                           // f470_id_ext2_detalle_comp
+      pA(filtro.bodegaItemPadre ?? row.BODEGA, 5) + // f470_id_bodega (bodega item padre)
+      pA(row.UBICACION, 10) +                // Ubicación
+      pA(row.LOTE_PRODUCTO, 15) +            // Lote
+      pN(701, 3) +                           // Concepto
+      pA(filtro.instalacion, 2) +            // Motivo (instalación)
+      pA(filtro.centroOperacion, 3) +        // Centro de operación movimiento
+      pA("", 20) +                           // Unidad de negocio (vacío)
+      pA("", 15) +                           // Centro de costo (vacío)
+      pA("", 15) +                           // Proyecto (vacío)
+      pA(row.UNIDAD_PRODUCTO, 4) +           // Unidad de medida
+      pQ(Number(row.KIL), 15, 4) +           // Cantidad base (KIL)
+      pQ(Number(row.UND), 15, 4) +           // Cantidad adicional (UND)
+      pA("", 255) +                          // Notas
+      pA(row.DESCRIPCION_PRODUCTO, 2000)     // Descripción
     );
   });
 

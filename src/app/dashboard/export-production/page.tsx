@@ -12,16 +12,10 @@ interface FilterSet {
   tipoDocumento: string | null;
   tipoMovimiento: string | null;
   fecha: string;
-  tipoDoc: string | null;
-  motivo: string | null;
-  centroCostos: string | null;
-  origenCentroOperacion: string | null;
-  origenBodega: string | null;
-  origenUbicacion: string | null;
-  destinoCentroOperacion: string | null;
-  destinoBodega: string | null;
-  destinoUbicacion: string | null;
-  unidadNegocio: string | null;
+  centroOperacion: string | null;
+  terceroPlanificador: string | null;
+  instalacion: string | null;
+  bodegaItemPadre: string | null;
 }
 
 const today = new Date().toISOString().split("T")[0];
@@ -34,16 +28,10 @@ const emptyForm = {
   tipoDocumento: "",
   tipoMovimiento: "",
   fecha: today,
-  tipoDoc: "",
-  motivo: "",
-  centroCostos: "",
-  origenCentroOperacion: "",
-  origenBodega: "",
-  origenUbicacion: "",
-  destinoCentroOperacion: "",
-  destinoBodega: "",
-  destinoUbicacion: "",
-  unidadNegocio: "",
+  centroOperacion: "",
+  terceroPlanificador: "",
+  instalacion: "",
+  bodegaItemPadre: "",
 };
 
 const inputClass = "px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors placeholder:text-slate-300";
@@ -123,23 +111,17 @@ export default function ExportProductionPage() {
 
   function handleEdit(item: FilterSet) {
     setForm({
-      identificador:          item.identificador,
-      nombre:                 item.nombre,
-      bodega:                 item.bodega                 ?? "",
-      ubicacion:              item.ubicacion              ?? "",
-      tipoDocumento:          item.tipoDocumento          ?? "",
-      tipoMovimiento:         item.tipoMovimiento         ?? "",
-      fecha:                  item.fecha.split("T")[0],
-      tipoDoc:                item.tipoDoc                ?? "",
-      motivo:                 item.motivo                 ?? "",
-      centroCostos:           item.centroCostos           ?? "",
-      origenCentroOperacion:  item.origenCentroOperacion  ?? "",
-      origenBodega:           item.origenBodega           ?? "",
-      origenUbicacion:        item.origenUbicacion        ?? "",
-      destinoCentroOperacion: item.destinoCentroOperacion ?? "",
-      destinoBodega:          item.destinoBodega          ?? "",
-      destinoUbicacion:       item.destinoUbicacion       ?? "",
-      unidadNegocio:          item.unidadNegocio          ?? "",
+      identificador:       item.identificador,
+      nombre:              item.nombre,
+      bodega:              item.bodega              ?? "",
+      ubicacion:           item.ubicacion            ?? "",
+      tipoDocumento:       item.tipoDocumento        ?? "",
+      tipoMovimiento:      item.tipoMovimiento       ?? "",
+      fecha:               item.fecha.split("T")[0],
+      centroOperacion:     item.centroOperacion      ?? "",
+      terceroPlanificador: item.terceroPlanificador  ?? "",
+      instalacion:         item.instalacion          ?? "",
+      bodegaItemPadre:     item.bodegaItemPadre      ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -344,42 +326,18 @@ export default function ExportProductionPage() {
           {/* Separador */}
           <div className="my-6 border-t border-slate-100" />
 
-          {/* Tipo Doc, Motivo, Centro de Costos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-            <Field label="Tipo Documento" name="tipoDoc" value={form.tipoDoc} onChange={handleChange} maxLength={3} placeholder="Ej: ORD" />
-            <Field label="Motivo" name="motivo" value={form.motivo} onChange={handleChange} maxLength={2} placeholder="Ej: P1" />
-            <Field label="Centro de Costos" name="centroCostos" value={form.centroCostos} onChange={handleChange} maxLength={15} placeholder="Ej: CC-PROD-001" />
-          </div>
-
-          {/* Origen */}
-          <div className="mt-5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-              Origen
+          {/* Orden de producción */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
+              Orden de producción
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pl-4 border-l-2 border-emerald-100">
-              <Field label="Centro de Operación" name="origenCentroOperacion" value={form.origenCentroOperacion} onChange={handleChange} maxLength={3} placeholder="Ej: C01" />
-              <Field label="Bodega" name="origenBodega" value={form.origenBodega} onChange={handleChange} maxLength={5} placeholder="Ej: BO01" />
-              <Field label="Ubicación" name="origenUbicacion" value={form.origenUbicacion} onChange={handleChange} maxLength={10} placeholder="Ej: A-01" />
-            </div>
           </div>
-
-          {/* Destino */}
-          <div className="mt-5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
-              Destino
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pl-4 border-l-2 border-blue-100">
-              <Field label="Centro de Operación" name="destinoCentroOperacion" value={form.destinoCentroOperacion} onChange={handleChange} maxLength={3} placeholder="Ej: C02" />
-              <Field label="Bodega" name="destinoBodega" value={form.destinoBodega} onChange={handleChange} maxLength={5} placeholder="Ej: BO02" />
-              <Field label="Ubicación" name="destinoUbicacion" value={form.destinoUbicacion} onChange={handleChange} maxLength={10} placeholder="Ej: B-05" />
-            </div>
-          </div>
-
-          {/* Unidad de Negocio */}
-          <div className="mt-5 max-w-sm">
-            <Field label="Unidad de Negocio" name="unidadNegocio" value={form.unidadNegocio} onChange={handleChange} maxLength={20} placeholder="Ej: MANUFACTURA" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-indigo-100">
+            <Field label="Centro de Operación" name="centroOperacion" value={form.centroOperacion} onChange={handleChange} maxLength={3} placeholder="Ej: C01" />
+            <Field label="Tercero Planificador" name="terceroPlanificador" value={form.terceroPlanificador} onChange={handleChange} maxLength={15} placeholder="Ej: PLANIF001" />
+            <Field label="Instalación" name="instalacion" value={form.instalacion} onChange={handleChange} maxLength={3} placeholder="Ej: I01" />
+            <Field label="Bodega Item Padre" name="bodegaItemPadre" value={form.bodegaItemPadre} onChange={handleChange} maxLength={5} placeholder="Ej: BO01" />
           </div>
 
           {/* Actions */}
