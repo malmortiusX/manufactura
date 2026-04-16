@@ -30,15 +30,28 @@ interface Filtro {
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";
 
+interface ErpError {
+  nroLinea: number;
+  tipoReg:  string;
+  subtipo:  string;
+  version:  string;
+  nivel:    string;
+  valor:    string;
+  detalle:  string;
+}
+
+interface DocResult {
+  exitoso: boolean;
+  errores: ErpError[];
+  estado:  EstadoDoc;
+}
+
 interface TransmitResult {
-  logId: number;
+  logId:    number;
   numeroOpg: number;
-  estadoOrden:   EstadoDoc;
-  estadoConsumo: EstadoDoc;
-  estadoEntrega: EstadoDoc;
-  respuestaOrden:   string;
-  respuestaConsumo: string;
-  respuestaEntrega: string;
+  orden:   DocResult;
+  consumo: DocResult;
+  entrega: DocResult;
 }
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
@@ -208,6 +221,95 @@ function EstadoBadge({ estado }: { estado: EstadoDoc }) {
   );
 }
 
+// ── Panel de errores ERP por documento ────────────────────────────────────
+function DocResultPanel({
+  label, result, onReintentar, retrying,
+}: {
+  label: string;
+  result: DocResult;
+  onReintentar?: () => void;
+  retrying?: boolean;
+}) {
+  return (
+    <div className={`rounded-xl border p-4 space-y-3 ${
+      result.estado === "ENVIADO"  ? "border-emerald-200 bg-emerald-50" :
+      result.estado === "ERROR"    ? "border-red-200 bg-red-50" :
+                                     "border-slate-200 bg-slate-50"
+    }`}>
+      {/* Cabecera */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-slate-700">{label}</span>
+        <EstadoBadge estado={result.estado} />
+      </div>
+
+      {/* Éxito */}
+      {result.exitoso && (
+        <p className="text-xs text-emerald-700 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Documento creado exitosamente en ERP
+        </p>
+      )}
+
+      {/* Errores */}
+      {result.errores.length > 0 && (
+        <div className="space-y-2">
+          {result.errores.map((e, i) => (
+            <div key={i} className="rounded-lg bg-white border border-red-100 px-3 py-2.5 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
+                  Línea {e.nroLinea}
+                </span>
+                {e.tipoReg && (
+                  <span className="font-mono text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                    Tipo {e.tipoReg}
+                  </span>
+                )}
+                {e.valor && (
+                  <span className="font-mono text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                    Valor: {e.valor}
+                  </span>
+                )}
+              </div>
+              {e.detalle && (
+                <p className="text-xs text-red-800 font-medium">{e.detalle}</p>
+              )}
+            </div>
+          ))}
+
+          {/* Botón reintentar */}
+          {onReintentar && (
+            <button
+              onClick={onReintentar}
+              disabled={retrying}
+              className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {retrying ? (
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              )}
+              Reintentar transmisión
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Pendiente (no se envió porque un documento anterior falló) */}
+      {result.estado === "PENDIENTE" && !result.exitoso && result.errores.length === 0 && (
+        <p className="text-xs text-slate-500">
+          No se envió — depende de que el documento anterior sea exitoso.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Página principal ───────────────────────────────────────────────────────
 const fmtNum = (n: number) =>
   new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -222,9 +324,10 @@ export default function ExportDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
-  const [transmitting, setTransmitting]       = useState(false);
-  const [transmitResult, setTransmitResult]   = useState<TransmitResult | null>(null);
-  const [transmitError, setTransmitError]     = useState<string | null>(null);
+  const [transmitting, setTransmitting]     = useState(false);
+  const [transmitResult, setTransmitResult] = useState<TransmitResult | null>(null);
+  const [transmitError, setTransmitError]   = useState<string | null>(null);
+  const [retrying, setRetrying]             = useState(false);
 
   const marcarLote = useCallback(async () => {
     setLoading(true);
@@ -256,11 +359,11 @@ export default function ExportDetailPage() {
   const xml2 = "// Pendiente de definición";
   const xml3 = "// Pendiente de definición";
 
-  const transmitir = useCallback(async () => {
+  const transmitir = useCallback(async (esReintento = false) => {
     if (!bache) return;
-    setTransmitting(true);
+    if (esReintento) setRetrying(true);
+    else { setTransmitting(true); setTransmitResult(null); }
     setTransmitError(null);
-    setTransmitResult(null);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
         method: "POST",
@@ -276,6 +379,7 @@ export default function ExportDetailPage() {
       setTransmitError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setTransmitting(false);
+      setRetrying(false);
     }
   }, [id, bache, xml1, xml2, xml3]);
 
@@ -377,29 +481,53 @@ export default function ExportDetailPage() {
 
       {/* Resultado de transmisión */}
       {transmitResult && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+          {/* Cabecera del panel */}
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-slate-700">Resultado de transmisión</span>
-            <span className="text-xs font-semibold text-slate-400">OPG #{transmitResult.numeroOpg}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-700">Resultado de transmisión</span>
+              <span className="text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full">
+                OPG #{transmitResult.numeroOpg}
+              </span>
+            </div>
+            {/* Resumen global */}
+            {transmitResult.orden.exitoso && transmitResult.consumo.exitoso && transmitResult.entrega.exitoso ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Todos los documentos enviados
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Hay errores — revisa los detalles
+              </span>
+            )}
           </div>
+
+          {/* Documentos */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {(
-              [
-                { label: "Orden de Producción",   estado: transmitResult.estadoOrden,   resp: transmitResult.respuestaOrden },
-                { label: "Consumo de Producción", estado: transmitResult.estadoConsumo, resp: transmitResult.respuestaConsumo },
-                { label: "Entrega de Producción", estado: transmitResult.estadoEntrega, resp: transmitResult.respuestaEntrega },
-              ] as { label: string; estado: EstadoDoc; resp: string }[]
-            ).map(({ label, estado, resp }) => (
-              <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-slate-600">{label}</span>
-                  <EstadoBadge estado={estado} />
-                </div>
-                {resp && (
-                  <p className="text-xs text-slate-400 break-words line-clamp-3" title={resp}>{resp}</p>
-                )}
-              </div>
-            ))}
+            <DocResultPanel
+              label="Orden de Producción"
+              result={transmitResult.orden}
+              onReintentar={!transmitResult.orden.exitoso ? () => transmitir(true) : undefined}
+              retrying={retrying}
+            />
+            <DocResultPanel
+              label="Consumo de Producción"
+              result={transmitResult.consumo}
+              onReintentar={!transmitResult.consumo.exitoso && transmitResult.orden.exitoso ? () => transmitir(true) : undefined}
+              retrying={retrying}
+            />
+            <DocResultPanel
+              label="Entrega de Producción"
+              result={transmitResult.entrega}
+              onReintentar={!transmitResult.entrega.exitoso && transmitResult.orden.exitoso && transmitResult.consumo.exitoso ? () => transmitir(true) : undefined}
+              retrying={retrying}
+            />
           </div>
         </div>
       )}
