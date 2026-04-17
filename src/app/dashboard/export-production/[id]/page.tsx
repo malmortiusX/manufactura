@@ -86,14 +86,14 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pN(1,   3) +                             // F_CIA                 = 1
     pN(0,   1) +                             // F_CONSEC_AUTO_REG     = 0 (manual)
     pA(filtro.centroOperacion,    3) +       // f850_id_co
-    pA("OPG",                     3) +       // f850_id_tipo_docto    = OPG
+    pA("OPF",                     3) +       // f850_id_tipo_docto    = OPF
     pN(consecOpg, 8) +                       // f850_consec_docto     (SEQ_OPG)
     pA(fecha,                     8) +       // f850_fecha            YYYYMMDD
     pN(1,   1) +                             // f850_ind_estado       = 1
     pN(0,   1) +                             // f850_ind_impresion    = 0
     pN(701, 3) +                             // f850_id_clase_docto   = 701
     pA(filtro.terceroPlanificador, 15) +     // f850_tercero_planificador
-    pA("OPG",                     3) +       // f850_id_tipo_docto_op_padre = OPG
+    pA("OPF",                     3) +       // f850_id_tipo_docto_op_padre = OPF
     pN(1,   8) +                             // f850_consec_docto_op_padre  = 1
     pA(filtro.instalacion,        3) +       // f850_id_instalacion
     pA("002",                     3) +       // f850_clase_op         = 002
@@ -116,7 +116,7 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
       pN(1,      2) +                         // F_VERSION-REG         = 01
       pN(1,      3) +                         // F_CIA                 = 1
       pA(filtro.centroOperacion,  3) +        // f851_id_co
-      pA("OPG",                   3) +        // f851_id_tipo_docto    = OPG
+      pA("OPF",                   3) +        // f851_id_tipo_docto    = OPF
       pN(consecOpg, 8) +                      // f851_consec_docto     (SEQ_OPG)
       pN(nroRegistro,            10) +        // f851_nro_registro
       pN(0,      7) +                         // f851_id_item          (vacío)
