@@ -252,7 +252,7 @@ function DocResultPanel({
         </p>
       )}
 
-      {/* Errores */}
+      {/* Errores parseados del diffgram */}
       {result.errores.length > 0 && (
         <div className="space-y-2">
           {result.errores.map((e, i) => (
@@ -266,9 +266,9 @@ function DocResultPanel({
                     Tipo {e.tipoReg}
                   </span>
                 )}
-                {e.valor && (
+                {e.valor?.trim() && (
                   <span className="font-mono text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
-                    Valor: {e.valor}
+                    Valor: {e.valor.trim()}
                   </span>
                 )}
               </div>
@@ -277,27 +277,22 @@ function DocResultPanel({
               )}
             </div>
           ))}
-
-          {/* Botón reintentar */}
-          {onReintentar && (
-            <button
-              onClick={onReintentar}
-              disabled={retrying}
-              className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              {retrying ? (
-                <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              ) : (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              )}
-              Reintentar transmisión
-            </button>
-          )}
         </div>
+      )}
+
+      {/* Fallback: error sin errores parseados — muestra respuesta cruda */}
+      {result.estado === "ERROR" && !result.exitoso && result.errores.length === 0 && (
+        <details className="group">
+          <summary className="text-xs text-red-600 font-medium cursor-pointer select-none list-none flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Ver respuesta del ERP
+          </summary>
+          <pre className="mt-2 text-[10px] text-slate-500 font-mono whitespace-pre-wrap break-all bg-white border border-red-100 rounded-lg p-2 max-h-48 overflow-y-auto">
+            {result.respuestaRaw || "Sin respuesta"}
+          </pre>
+        </details>
       )}
 
       {/* Pendiente (no se envió porque un documento anterior falló) */}
@@ -305,6 +300,26 @@ function DocResultPanel({
         <p className="text-xs text-slate-500">
           No se envió — depende de que el documento anterior sea exitoso.
         </p>
+      )}
+
+      {/* Botón reintentar — visible siempre que hay error y hay handler */}
+      {result.estado === "ERROR" && onReintentar && (
+        <button
+          onClick={onReintentar}
+          disabled={retrying}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          {retrying ? (
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          )}
+          Reintentar transmisión
+        </button>
       )}
     </div>
   );

@@ -29,8 +29,14 @@ export interface DocResult {
 }
 
 // ── Parser de respuesta SOAP del ERP ──────────────────────────────────────
-// Lee <printTipoError> y extrae los bloques <Table> del diffgram si hay error.
+// Estrategia:
+//  1. Lee <printTipoError> para saber si hubo error.
+//  2. Si hay error, localiza el <NewDataSet> del diffgram (no el del schema)
+//     y divide el contenido por <Table para extraer cada fila de error.
+//  Se evita regex compleja con grupos anidados porque el XML del ERP mezcla
+//  namespaces (diffgr:, msdata:, xs:) que confunden los patrones genéricos.
 function parseSoapRespuesta(xml: string): DocResult {
+  // ── 1. printTipoError ────────────────────────────────────────────────────
   const tipoErrorMatch = xml.match(/<printTipoError>(\d+)<\/printTipoError>/);
   const printTipoError = tipoErrorMatch ? parseInt(tipoErrorMatch[1], 10) : 1;
   const exitoso = printTipoError === 0;
@@ -38,23 +44,37 @@ function parseSoapRespuesta(xml: string): DocResult {
   const errores: ErpError[] = [];
 
   if (!exitoso) {
-    const tableRegex = /<Table[\s\S]*?>([\s\S]*?)<\/Table>/g;
-    let match: RegExpExecArray | null;
-    const get = (block: string, tag: string): string => {
-      const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
-      return m ? m[1].trim() : "";
-    };
-    while ((match = tableRegex.exec(xml)) !== null) {
-      const block = match[1];
-      errores.push({
-        nroLinea: parseInt(get(block, "f_nro_linea"), 10) || 0,
-        tipoReg:  get(block, "f_tipo_reg"),
-        subtipo:  get(block, "f_subtipo_reg"),
-        version:  get(block, "f_version"),
-        nivel:    get(block, "f_nivel"),
-        valor:    get(block, "f_valor"),
-        detalle:  get(block, "f_detalle"),
-      });
+    // ── 2. Extraer sección NewDataSet del diffgram ───────────────────────
+    // El schema también menciona "NewDataSet" pero como xs:element name="..."
+    // El diffgram tiene <NewDataSet xmlns=""> (tag real), lo buscamos así:
+    const dsStart = xml.indexOf("<NewDataSet ");
+    const dsEnd   = xml.indexOf("</NewDataSet>");
+    if (dsStart !== -1 && dsEnd !== -1) {
+      const dataset = xml.slice(dsStart, dsEnd + "</NewDataSet>".length);
+
+      // ── 3. Dividir por <Table para obtener bloques individuales ─────────
+      const chunks = dataset.split(/<Table\b[^>]*>/);
+      // El primer chunk es el tag <NewDataSet ...>, los siguientes son datos
+      const get = (block: string, tag: string): string => {
+        const open  = `<${tag}>`;
+        const close = `</${tag}>`;
+        const i = block.indexOf(open);
+        if (i === -1) return "";
+        return block.slice(i + open.length, block.indexOf(close, i)).trim();
+      };
+
+      for (let k = 1; k < chunks.length; k++) {
+        const content = chunks[k].split("</Table>")[0];
+        errores.push({
+          nroLinea: parseInt(get(content, "f_nro_linea"), 10) || 0,
+          tipoReg:  get(content, "f_tipo_reg"),
+          subtipo:  get(content, "f_subtipo_reg"),
+          version:  get(content, "f_version"),
+          nivel:    get(content, "f_nivel"),
+          valor:    get(content, "f_valor"),
+          detalle:  get(content, "f_detalle"),
+        });
+      }
     }
   }
 
