@@ -130,104 +130,111 @@ async function callSoap(lineasTexto: string): Promise<DocResult> {
     body: buildEnvelope(lineasTexto),
   });
 
-  if (!res.ok) throw new Error(`HTTP ${res.status} al llamar al servicio SOAP`);
+  // SOAP devuelve HTTP 500 para faults pero el cuerpo sigue siendo XML válido.
+  // Siempre leer el texto; dejar que parseSoapRespuesta determine éxito/error.
   const text = await res.text();
+  if (!text) throw new Error(`HTTP ${res.status} — sin cuerpo en la respuesta SOAP`);
   return parseSoapRespuesta(text);
 }
 
 // ── POST handler ───────────────────────────────────────────────────────────
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
-  const { id } = await params;
-  const filtroId = Number(id);
-
-  const body = await req.json() as { bache: number; consecOpg: number; xml1: string; xml2: string; xml3: string };
-  const { bache, consecOpg, xml1, xml2, xml3 } = body;
-
-  if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" }, { status: 400 });
-  if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo del documento (consecOpg)" }, { status: 400 });
-
-  // El consecutivo ya fue incrementado por /api/export-produccion/seq-opg
-  // antes de construir el XML; lo usamos directamente como numeroOpg.
-  const numeroOpg = consecOpg;
-
-  // 2. Crear registro inicial en OpgLog
-  const log = await prisma.opgLog.create({
-    data: {
-      tipoDocumento: "OPG",
-      numeroOpg,
-      consecDocto:  consecOpg,
-      numeroBache:  String(bache),
-      filtroId,
-      xml1,
-      xml2,
-      xml3,
-      estadoOrdenProduccion:   "PENDIENTE",
-      estadoConsumoProduccion: "PENDIENTE",
-      estadoEntregaProduccion: "PENDIENTE",
-    },
-  });
-
-  // 3. Enviar los 3 documentos al ERP y parsear respuestas
-  const pendiente: DocResult = {
-    exitoso: false,
-    printTipoError: -1,
-    errores: [],
-    respuestaRaw: "",
-  };
-
-  let ordenResult:  DocResult = pendiente;
-  let consumoResult: DocResult = pendiente;
-  let entregaResult: DocResult = pendiente;
-
   try {
-    ordenResult = await callSoap(xml1);
-  } catch (e) {
-    ordenResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
-  }
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  // Solo continúa con consumo/entrega si la orden fue exitosa
-  if (ordenResult.exitoso) {
+    const { id } = await params;
+    const filtroId = Number(id);
+
+    const body = await req.json() as { bache: number; consecOpg: number; xml1: string; xml2: string; xml3: string };
+    const { bache, consecOpg, xml1, xml2, xml3 } = body;
+
+    if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" }, { status: 400 });
+    if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo del documento (consecOpg)" }, { status: 400 });
+
+    // El consecutivo ya fue incrementado por /api/export-produccion/seq-opg
+    // antes de construir el XML; lo usamos directamente como numeroOpg.
+    const numeroOpg = consecOpg;
+
+    // 2. Crear registro inicial en OpgLog
+    const log = await prisma.opgLog.create({
+      data: {
+        tipoDocumento: "OPG",
+        numeroOpg,
+        consecDocto:  consecOpg,
+        numeroBache:  String(bache),
+        filtroId,
+        xml1,
+        xml2,
+        xml3,
+        estadoOrdenProduccion:   "PENDIENTE",
+        estadoConsumoProduccion: "PENDIENTE",
+        estadoEntregaProduccion: "PENDIENTE",
+      },
+    });
+
+    // 3. Enviar los 3 documentos al ERP y parsear respuestas
+    const pendiente: DocResult = {
+      exitoso: false,
+      printTipoError: -1,
+      errores: [],
+      respuestaRaw: "",
+    };
+
+    let ordenResult:  DocResult = pendiente;
+    let consumoResult: DocResult = pendiente;
+    let entregaResult: DocResult = pendiente;
+
     try {
-      consumoResult = await callSoap(xml2);
+      ordenResult = await callSoap(xml1);
     } catch (e) {
-      consumoResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
+      ordenResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
     }
-  }
 
-  if (ordenResult.exitoso && consumoResult.exitoso) {
-    try {
-      entregaResult = await callSoap(xml3);
-    } catch (e) {
-      entregaResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
+    // Solo continúa con consumo/entrega si la orden fue exitosa
+    if (ordenResult.exitoso) {
+      try {
+        consumoResult = await callSoap(xml2);
+      } catch (e) {
+        consumoResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
+      }
     }
+
+    if (ordenResult.exitoso && consumoResult.exitoso) {
+      try {
+        entregaResult = await callSoap(xml3);
+      } catch (e) {
+        entregaResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
+      }
+    }
+
+    const estadoOrden   = ordenResult.exitoso   ? "ENVIADO" : "ERROR";
+    const estadoConsumo = consumoResult.exitoso  ? "ENVIADO" : (consumoResult.printTipoError === -1 && !ordenResult.exitoso ? "PENDIENTE" : "ERROR");
+    const estadoEntrega = entregaResult.exitoso  ? "ENVIADO" : (entregaResult.printTipoError === -1 && (!ordenResult.exitoso || !consumoResult.exitoso) ? "PENDIENTE" : "ERROR");
+
+    // 4. Actualizar el log con los resultados
+    await prisma.opgLog.update({
+      where: { id: log.id },
+      data: {
+        estadoOrdenProduccion:      estadoOrden,
+        estadoConsumoProduccion:    estadoConsumo,
+        estadoEntregaProduccion:    estadoEntrega,
+        respuestaOrdenProduccion:   ordenResult.respuestaRaw,
+        respuestaConsumoProduccion: consumoResult.respuestaRaw,
+        respuestaEntregaProduccion: entregaResult.respuestaRaw,
+        intentos: { increment: 1 },
+      },
+    });
+
+    return NextResponse.json({
+      logId: log.id,
+      numeroOpg,
+      orden:   { exitoso: ordenResult.exitoso,   errores: ordenResult.errores,   estado: estadoOrden },
+      consumo: { exitoso: consumoResult.exitoso,  errores: consumoResult.errores,  estado: estadoConsumo },
+      entrega: { exitoso: entregaResult.exitoso,  errores: entregaResult.errores,  estado: estadoEntrega },
+    });
+  } catch (err) {
+    console.error("[POST /api/export-produccion/[id]/transmit]", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
-
-  const estadoOrden   = ordenResult.exitoso   ? "ENVIADO" : "ERROR";
-  const estadoConsumo = consumoResult.exitoso  ? "ENVIADO" : (consumoResult.printTipoError === -1 && !ordenResult.exitoso ? "PENDIENTE" : "ERROR");
-  const estadoEntrega = entregaResult.exitoso  ? "ENVIADO" : (entregaResult.printTipoError === -1 && (!ordenResult.exitoso || !consumoResult.exitoso) ? "PENDIENTE" : "ERROR");
-
-  // 4. Actualizar el log con los resultados
-  await prisma.opgLog.update({
-    where: { id: log.id },
-    data: {
-      estadoOrdenProduccion:      estadoOrden,
-      estadoConsumoProduccion:    estadoConsumo,
-      estadoEntregaProduccion:    estadoEntrega,
-      respuestaOrdenProduccion:   ordenResult.respuestaRaw,
-      respuestaConsumoProduccion: consumoResult.respuestaRaw,
-      respuestaEntregaProduccion: entregaResult.respuestaRaw,
-      intentos: { increment: 1 },
-    },
-  });
-
-  return NextResponse.json({
-    logId: log.id,
-    numeroOpg,
-    orden:   { exitoso: ordenResult.exitoso,   errores: ordenResult.errores,   estado: estadoOrden },
-    consumo: { exitoso: consumoResult.exitoso,  errores: consumoResult.errores,  estado: estadoConsumo },
-    entrega: { exitoso: entregaResult.exitoso,  errores: entregaResult.errores,  estado: estadoEntrega },
-  });
 }
