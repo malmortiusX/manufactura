@@ -161,7 +161,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       data: {
         tipoDocumento: "OPG",
         numeroOpg,
-        consecDocto:  consecOpg,
         numeroBache:  String(bache),
         filtroId,
         xml1,
