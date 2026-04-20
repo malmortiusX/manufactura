@@ -49,7 +49,8 @@ interface DocResult {
 interface TransmitResult {
   logId:     number;
   numeroOpg: number;
-  xml2:      string;   // XML2 construido server-side tras enviar la orden
+  xml2:      string;   // construido server-side tras crear la orden
+  xml3:      string;   // construido server-side tras crear el consumo
   orden:     DocResult;
   consumo:   DocResult;
   entrega:   DocResult;
@@ -518,7 +519,7 @@ export default function ExportDetailPage() {
   // XML2 y XML3 se construyen server-side después de crear la orden;
   // se muestran desde el resultado de transmisión cuando están disponibles.
   const xml2Preview = transmitResult?.xml2 || "// Se genera en el servidor al consultar los componentes de la OP creada";
-  const xml3Preview = "// Pendiente de definición";
+  const xml3Preview = transmitResult?.xml3 || "// Se genera en el servidor al completar el consumo";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -584,10 +585,26 @@ export default function ExportDetailPage() {
         if (codigo) lotesPorProducto[codigo] = lote;
       });
 
+      // Filas necesarias para que el servidor construya XML3 (Entrega)
+      const rowsParaXml3 = rows.map((r) => ({
+        CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
+        LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
+        BODEGA:          r.BODEGA,
+        UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
+        KIL:             Number(r.KIL),
+        UND:             Number(r.UND),
+      }));
+
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final, lotesPorProducto }),
+        body:    JSON.stringify({
+          bache,
+          consecOpg:        nuevoConsec,
+          xml1:             xml1Final,
+          lotesPorProducto,
+          rows:             rowsParaXml3,
+        }),
       });
       const text = await res.text();
       if (!text) throw new Error("El servidor no devolvió respuesta");

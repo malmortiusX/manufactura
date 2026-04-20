@@ -123,6 +123,121 @@ function buildXML2(
   return [opening, encabezado, ...productLines, closing].join("\n");
 }
 
+// ── XML3 — Entrega de Producción (tipo 450-01 / 470-02) ──────────────────
+// Usa las mismas filas de la orden (XML1): mismos productos, mismas cantidades.
+// Estructura:
+//   Línea 1   : 000000100000001001  (fija)
+//   Línea 2   : encabezado tipo 450 subtipo 01 (816 chars)
+//   Líneas 3…N+2 : productos tipo 470 subtipo 02 (2766 chars cada uno)
+//   Línea N+3 : cierre
+
+interface RowXml3 {
+  CODIGO_PRODUCTO: string;
+  LOTE_PRODUCTO:   string;
+  BODEGA:          string;
+  UNIDAD_PRODUCTO: string;
+  KIL:             number;
+  UND:             number;
+}
+
+function buildXML3(
+  centroOperacion: string,
+  nombre:          string,
+  fecha:           string,          // YYYYMMDD
+  consecOpg:       number,
+  rows:            RowXml3[],
+  bodegaItemPadre: string | null | undefined,
+): string {
+  const opening = "000000100000001001";
+
+  // ── Encabezado tipo 450, subtipo 01, versión 01 (816 chars) ─────────────
+  // Longitudes: 7+4+2+2+3+1+3+3+8+8+1+1+255+3+15+10+15+3+15+50+15+30+15+20+20+20+255+2+15+15 = 816
+  const encabezado =
+    pN(2,    7) +                  // F_NUMERO-REG        = 2
+    pN(450,  4) +                  // F_TIPO-REG          = 450
+    pN(1,    2) +                  // F_SUBTIPO-REG       = 01
+    pN(1,    2) +                  // F_VERSION-REG       = 01
+    pN(1,    3) +                  // F_CIA               = 1
+    pN(1,    1) +                  // F_CONSEC_AUTO_REG   = 1 (automático)
+    pA(centroOperacion,   3) +     // f350_id_co
+    pA("EPG",             3) +     // f350_id_tipo_docto  = EPG
+    pN(1,    8) +                  // f350_consec_docto   = 1 (ERP asigna)
+    pA(fecha,             8) +     // f350_fecha          YYYYMMDD
+    pN(1,    1) +                  // f350_ind_estado     = 1
+    pN(0,    1) +                  // f350_ind_impresion  = 0
+    pA(nombre,          255) +     // f350_notas
+    pN(720,  3) +                  // f350_id_clase_docto = 720
+    pA("",   15) +                 // f450_docto_alterno
+    pA("",   10) +                 // f462_id_vehiculo
+    pA("",   15) +                 // f462_id_tercero_transp
+    pA("",    3) +                 // f462_id_sucursal_transp
+    pA("",   15) +                 // f462_id_tercero_conductor
+    pA("",   50) +                 // f462_nombre_conductor
+    pA("",   15) +                 // f462_identif_conductor
+    pA("",   30) +                 // f462_numero_guia
+    pN(0,    15) +                 // f462_cajas
+    pQ(0,    15, 4) +              // f462_peso           (20 chars)
+    pQ(0,    15, 4) +              // f462_volumen        (20 chars)
+    pQ(0,    15, 4) +              // f462_valor_seguros  (20 chars)
+    pA("",  255) +                 // f462_notas
+    pA("01",  2) +                 // f350_id_motivo_consumo = 01
+    pA("",   15) +                 // f350_id_proyecto_consumo
+    pA("70010101", 15);            // f350_id_ccosto_consumo = 70010101
+
+  // ── Líneas de producto tipo 470, subtipo 02, versión 02 (2766 chars c/u) ──
+  // Longitudes: 7+4+2+2+3+3+3+8+10+3+8+7+50+20+20+20+7+50+20+20+20+5+10+15+3+2+2+3+20+15+15+20+20+20+20+255+2000+40+4+10 = 2766
+  const productLines = rows.map((row, i) => {
+    const bodega = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
+    return (
+      pN(i + 3,  7) +              // F_NUMERO-REG        (3, 4, 5…)
+      pN(470,    4) +              // F_TIPO-REG          = 470
+      pN(2,      2) +              // F_SUBTIPO-REG       = 02
+      pN(2,      2) +              // F_VERSION-REG       = 02
+      pN(1,      3) +              // F_CIA               = 1
+      pA(centroOperacion,   3) +   // f470_id_co
+      pA("EPG",             3) +   // f470_id_tipo_docto  = EPG
+      pN(1,      8) +              // f470_consec_docto   = 1 (coincide con encabezado)
+      pN(i + 1, 10) +              // f470_nro_registro   (1, 2, 3…)
+      pA("OPG",             3) +   // f850_id_tipo_docto  = OPG
+      pN(consecOpg,         8) +   // f850_consec_docto   (nro de la OP)
+      pN(0,      7) +              // f470_id_item        (vacío)
+      pA(row.CODIGO_PRODUCTO, 50) + // f470_referencia_item
+      pA("",    20) +              // f470_codigo_barras
+      pA("",    20) +              // f470_id_ext1_detalle
+      pA("",    20) +              // f470_id_ext2_detalle
+      pN(0,      7) +              // f470_id_item_otros  (vacío)
+      pA("",    50) +              // f470_referencia_item_otros
+      pA("",    20) +              // f470_codigo_barras_otros
+      pA("",    20) +              // f470_id_ext1_detalle_otros
+      pA("",    20) +              // f470_id_ext2_detalle_otros
+      bodega +                     // f470_id_bodega      (5 chars)
+      pA("",    10) +              // f470_id_ubicacion_aux
+      pA(row.LOTE_PRODUCTO, 15) +  // f470_id_lote
+      pN(701,    3) +              // f470_id_concepto    = 701
+      pA("03",   2) +              // f470_id_motivo_entrega = 03
+      pA("",     2) +              // f470_id_motivo_rechazo
+      pA(centroOperacion,   3) +   // f470_id_co_movto
+      pA("31",  20) +              // f470_id_un_movto
+      pA("70010401",       15) +   // f470_id_ccosto_movto
+      pA("",    15) +              // f470_id_proyecto
+      pQ(Number(row.KIL), 15, 4) + // f470_cant_base_entrega  (20 chars)
+      pQ(Number(row.UND), 15, 4) + // f470_cant_2_entrega     (20 chars)
+      pQ(0,     15, 4) +           // f470_cant_base_rechazo  (20 chars)
+      pQ(0,     15, 4) +           // f470_cant_2_rechazo     (20 chars)
+      pA("",   255) +              // f470_notas
+      pA("",  2000) +              // f470_desc_varible
+      pA("",    40) +              // f_desc_item
+      pA(row.UNIDAD_PRODUCTO, 4) + // f_id_um_inventario
+      pN(0,     10)                // f_nro_reg_item_padre
+    );
+  });
+
+  const closingNum = rows.length + 3;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+
+  return [opening, encabezado, ...productLines, closing].join("\n");
+}
+
 // ── POST handler ───────────────────────────────────────────────────────────
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -141,8 +256,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       consecOpg:        number;
       xml1:             string;
       lotesPorProducto: Record<string, string>; // { codigoProducto: lote }
+      rows:             RowXml3[];              // filas de la orden (para XML3)
     };
-    const { bache, consecOpg, xml1, lotesPorProducto = {} } = body;
+    const { bache, consecOpg, xml1, lotesPorProducto = {}, rows = [] } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo (consecOpg)" }, { status: 400 });
@@ -209,11 +325,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // 4. XML3 — Entrega de Producción (pendiente de definición)
+    // 4. Si consumo fue exitoso, construir y enviar XML3 — Entrega de Producción
     if (ordenResult.exitoso && consumoResult.exitoso) {
-      xml3 = "// Pendiente de definición";
-      // try { entregaResult = await callSoap(xml3); }
-      // catch (e) { entregaResult = { ... }; }
+      try {
+        xml3 = buildXML3(
+          filtro.centroOperacion?.trim() ?? "",
+          filtro.nombre,
+          fecha,
+          consecOpg,
+          rows,
+          filtro.bodegaItemPadre,
+        );
+
+        // Persistir XML3 en el log
+        await prisma.opgLog.update({ where: { id: log.id }, data: { xml3 } });
+
+        entregaResult = await callSoap(xml3);
+      } catch (e) {
+        entregaResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
+      }
     }
 
     const estadoOrden   = ordenResult.exitoso   ? "ENVIADO" : "ERROR";
@@ -240,7 +370,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({
       logId: log.id,
       numeroOpg,
-      xml2,   // devuelto para que la página lo muestre
+      xml2,   // devueltos para que la página los muestre
+      xml3,
       orden:   { exitoso: ordenResult.exitoso,   errores: ordenResult.errores,   estado: estadoOrden },
       consumo: { exitoso: consumoResult.exitoso,  errores: consumoResult.errores, estado: estadoConsumo },
       entrega: { exitoso: entregaResult.exitoso,  errores: entregaResult.errores, estado: estadoEntrega },
