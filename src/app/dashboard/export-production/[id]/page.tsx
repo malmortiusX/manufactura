@@ -49,6 +49,7 @@ interface DocResult {
 interface TransmitResult {
   logId:     number;
   numeroOpg: number;
+  xml2:      string;   // XML2 construido server-side tras enviar la orden
   orden:     DocResult;
   consumo:   DocResult;
   entrega:   DocResult;
@@ -514,8 +515,10 @@ export default function ExportDetailPage() {
 
   const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
   const xml1     = filtro ? buildXML1(filtro, rows, consecOpg) : "";
-  const xml2     = "// Pendiente de definición";
-  const xml3     = "// Pendiente de definición";
+  // XML2 y XML3 se construyen server-side después de crear la orden;
+  // se muestran desde el resultado de transmisión cuando están disponibles.
+  const xml2Preview = transmitResult?.xml2 || "// Se genera en el servidor al consultar los componentes de la OP creada";
+  const xml3Preview = "// Pendiente de definición";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -570,13 +573,13 @@ export default function ExportDetailPage() {
       const nuevoConsec: number = seqData.consecOpg;
       setConsecOpg(nuevoConsec);
 
-      // ── Paso 3: Construir y transmitir XMLs ───────────────────────────
+      // ── Paso 3: Construir y transmitir — XML2 se construye server-side ───
       const xml1Final = buildXML1(filtro, rows, nuevoConsec);
 
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final, xml2, xml3 }),
+        body:    JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final }),
       });
       const text = await res.text();
       if (!text) throw new Error("El servidor no devolvió respuesta");
@@ -589,7 +592,7 @@ export default function ExportDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, xml2, xml3]);
+  }, [id, bache, filtro, rows]);
 
   return (
     <div className="space-y-5">
@@ -773,8 +776,8 @@ export default function ExportDetailPage() {
           {/* XMLs */}
           <XmlBlock title="XML Lotes — Tipo 403"           content={xmlLotes} />
           <XmlBlock title="XML 1 — Orden de Producción"   content={xml1} />
-          <XmlBlock title="XML 2 — Consumo de Producción" content={xml2} />
-          <XmlBlock title="XML 3 — Entrega de Producción" content={xml3} />
+          <XmlBlock title="XML 2 — Consumo de Producción" content={xml2Preview} />
+          <XmlBlock title="XML 3 — Entrega de Producción" content={xml3Preview} />
         </>
       )}
 

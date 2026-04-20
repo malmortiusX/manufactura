@@ -63,6 +63,123 @@ export function parseSoapRespuesta(xml: string): DocResult {
   return { exitoso, printTipoError, errores, respuestaRaw: xml };
 }
 
+// ── Tipo: componente de una OP consultado al ERP ──────────────────────────
+export interface ComponenteOP {
+  padreReferencia:   string;   // Padre_Referencia  (trimmed)
+  bodegaId:          string;   // Bodega_id         (trimmed)
+  hijoReferencia:    string;   // Hijo_Referencia   (trimmed)
+  hijoUnidad:        string;   // Hijo_unidadMedida (trimmed)
+  cantidadPendiente: number;   // Cantidad_pendiente1
+}
+
+// ── Envelope para EjecutarConsultaXML (consulta de componentes) ───────────
+function buildQueryEnvelope(idCo: string, tipoDoc: string, nroDoc: number): string {
+  const conexion = process.env.ERP_CONEXION ?? "";
+  const cia      = process.env.ERP_CIA      ?? "1";
+  const usuario  = process.env.ERP_USUARIO  ?? "";
+  const clave    = process.env.ERP_CLAVE    ?? "";
+
+  const consulta = `<Consulta>
+<NombreConexion>${conexion}</NombreConexion>
+<IdCia>${cia}</IdCia>
+<IdProveedor>FENIX</IdProveedor>
+<IdConsulta>WS_FENIX_COMPONENTES_OP</IdConsulta>
+<Usuario>${usuario}</Usuario>
+<Clave>${clave}</Clave>
+<Parametros>
+<idCia>${cia}</idCia>
+<idCo>${idCo}</idCo>
+<tipoDoc>${tipoDoc}</tipoDoc>
+<nroDoc>${nroDoc}</nroDoc>
+</Parametros>
+</Consulta>`;
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+<soapenv:Header/>
+<soapenv:Body>
+<tem:EjecutarConsultaXML>
+<tem:pvstrxmlParametros><![CDATA[${consulta}]]></tem:pvstrxmlParametros>
+</tem:EjecutarConsultaXML>
+</soapenv:Body>
+</soapenv:Envelope>`;
+}
+
+// ── Parser de respuesta de componentes ────────────────────────────────────
+function parseComponentesRespuesta(xml: string): ComponenteOP[] {
+  const dsStart = xml.indexOf("<NewDataSet");
+  const dsEnd   = xml.indexOf("</NewDataSet>");
+  if (dsStart === -1 || dsEnd === -1) return [];
+
+  const dataset = xml.slice(dsStart, dsEnd + "</NewDataSet>".length);
+  const chunks  = dataset.split(/<Resultado\b[^>]*>/);
+
+  const get = (block: string, tag: string): string => {
+    const open  = `<${tag}>`;
+    const close = `</${tag}>`;
+    const i = block.indexOf(open);
+    if (i === -1) return "";
+    return block.slice(i + open.length, block.indexOf(close, i)).trim();
+  };
+
+  const componentes: ComponenteOP[] = [];
+  for (let k = 1; k < chunks.length; k++) {
+    const content = chunks[k].split("</Resultado>")[0];
+    componentes.push({
+      padreReferencia:   get(content, "Padre_Referencia"),
+      bodegaId:          get(content, "Bodega_id"),
+      hijoReferencia:    get(content, "Hijo_Referencia"),
+      hijoUnidad:        get(content, "Hijo_unidadMedida"),
+      cantidadPendiente: parseFloat(get(content, "Cantidad_pendiente1")) || 0,
+    });
+  }
+  return componentes;
+}
+
+// ── Consulta de componentes de una OP al ERP ──────────────────────────────
+export async function queryComponentesOP(
+  idCo:    string,
+  tipoDoc: string,
+  nroDoc:  number,
+): Promise<ComponenteOP[]> {
+  const url = process.env.ERP_SOAP_URL ?? "";
+  if (!url) throw new Error("ERP_SOAP_URL no está configurada en .env");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000);
+
+  try {
+    const res = await fetch(url, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "text/xml;charset=utf-8",
+        SOAPAction: `"http://tempuri.org/EjecutarConsultaXML"`,
+      },
+      body:   buildQueryEnvelope(idCo, tipoDoc, nroDoc),
+      signal: controller.signal,
+    });
+
+    const text = await res.text();
+    if (!text) throw new Error("Sin respuesta al consultar componentes de la OP");
+    return parseComponentesRespuesta(text);
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Tiempo de espera agotado al consultar componentes de la OP");
+    }
+    if (
+      err instanceof TypeError &&
+      err.message === "fetch failed" &&
+      "cause" in err &&
+      err.cause instanceof Error
+    ) {
+      throw new Error(`Error de red al consultar componentes [${(err as TypeError & { cause: Error }).cause.message}]`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Construcción del envelope SOAP ────────────────────────────────────────
 export function buildEnvelope(lineasTexto: string): string {
   const conexion = process.env.ERP_CONEXION ?? "";

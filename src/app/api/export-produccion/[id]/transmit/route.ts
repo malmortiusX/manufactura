@@ -1,16 +1,121 @@
 // src/app/api/export-produccion/[id]/transmit/route.ts
 // Flujo:
-//  1. Crea un registro en OpgLog con los XMLs y el bache
-//  2. Envía cada XML al ERP vía SOAP y parsea la respuesta
-//  3. Actualiza el OpgLog con el estado y los errores de cada documento
+//  1. Crea un registro inicial en OpgLog
+//  2. Envía XML1 (Orden de Producción) al ERP
+//  3. Si es exitoso, consulta los componentes de la OP creada
+//  4. Construye y envía XML2 (Consumo de Producción) con los componentes
+//  5. Envía XML3 (Entrega de Producción) — pendiente de definición
+//  6. Actualiza el OpgLog con todos los estados y respuestas
 
-import { NextResponse } from "next/server";
-import { auth }         from "@/lib/auth";
-import { prisma }       from "@/lib/prisma";
-import { headers }      from "next/headers";
-import { callSoap, type DocResult } from "@/lib/erp-soap";
+import { NextResponse }                              from "next/server";
+import { auth }                                      from "@/lib/auth";
+import { prisma }                                    from "@/lib/prisma";
+import { headers }                                   from "next/headers";
+import {
+  callSoap,
+  queryComponentesOP,
+  type DocResult,
+  type ComponenteOP,
+} from "@/lib/erp-soap";
 
 export type { ErpError, DocResult } from "@/lib/erp-soap";
+
+// ── Utilidades de formato (server-side) ───────────────────────────────────
+const pN = (val: string | number | null | undefined, len: number) =>
+  String(Math.floor(Number(val) || 0)).padStart(len, "0").slice(-len);
+
+const pA = (val: string | null | undefined, len: number) =>
+  (val ?? "").slice(0, len).padEnd(len, " ");
+
+function pQ(val: number, intLen: number, dec: number): string {
+  const factor  = Math.pow(10, dec);
+  const rounded = Math.round(Number(val) * factor) / factor;
+  const [intPart, decPart = ""] = rounded.toFixed(dec).split(".");
+  return intPart.padStart(intLen, "0") + "." + decPart.padEnd(dec, "0");
+}
+
+// ── XML2 — Consumo de Producción (tipo 450 / 470) ────────────────────────
+// Estructura:
+//   Línea 1 : 000000100000001001  (fija)
+//   Línea 2 : encabezado tipo 450 (344 chars)
+//   Líneas 3…N+2 : componentes tipo 470 (2673 chars cada uno)
+//   Línea N+3 : cierre
+function buildXML2(
+  centroOperacion: string,
+  nombre:          string,
+  fecha:           string,   // YYYYMMDD
+  consecOpg:       number,
+  componentes:     ComponenteOP[],
+): string {
+  const opening = "000000100000001001";
+
+  // ── Encabezado tipo 450 (344 chars) ─────────────────────────────────────
+  // Longitudes: 7+4+2+2+3+1+3+3+8+8+1+1+3+15+255+2+15+3+8 = 344
+  const encabezado =
+    pN(2,   7) +                   // F_NUMERO-REG        = 2
+    pN(450, 4) +                   // F_TIPO-REG          = 450
+    pN(3,   2) +                   // F_SUBTIPO-REG       = 3
+    pN(1,   2) +                   // F_VERSION-REG       = 1
+    pN(1,   3) +                   // F_CIA               = 1
+    pN(1,   1) +                   // F_CONSEC_AUTO_REG   = 1 (automático)
+    pA(centroOperacion, 3) +       // f350_id_co
+    pA("SCG",           3) +       // f350_id_tipo_docto  = SCG
+    pN(1,   8) +                   // f350_consec_docto   = 1 (ERP asigna)
+    pA(fecha,           8) +       // f350_id_fecha       YYYYMMDD
+    pN(1,   1) +                   // f350_ind_estado     = 1
+    pN(0,   1) +                   // f350_ind_impresion  = 0
+    pN(710, 3) +                   // f350_id_clase_docto = 710
+    pA("",             15) +       // f350_docto_alterno
+    pA(nombre,        255) +       // f350_notas
+    pA("01",            2) +       // f350_id_motivo      = 01
+    pA("",             15) +       // f350_id_proyecto
+    pA("OPG",           3) +       // f850_tipo_docto     = OPG
+    pN(consecOpg,       8);        // f850_consec_docto   (nro de la OP creada)
+
+  // ── Líneas de componentes tipo 470 (2673 chars c/u) ──────────────────────
+  // Longitudes: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+10+7+50+20+20+20+5+10+15+3+2+3+20+15+15+4+20+20+255+2000 = 2673
+  const productLines = componentes.map((comp, i) =>
+    pN(i + 3,  7) +                // F_NUMERO-REG        (3, 4, 5…)
+    pN(470,    4) +                // F_TIPO-REG          = 470
+    pN(0,      2) +                // F_SUBTIPO-REG       = 00
+    pN(4,      2) +                // F_VERSION-REG       = 4
+    pN(1,      3) +                // F_CIA               = 1
+    pA(centroOperacion,  3) +      // f470_id_co
+    pA("SCG",            3) +      // f470_id_tipo_docto  = SCG
+    pN(1,      8) +                // f470_consec_docto   = 1 (coincide con encabezado)
+    pN(i + 1, 10) +                // f470_nro_registro   (1, 2, 3…)
+    pN(0,      7) +                // f470_id_item_padre  (vacío)
+    pA(comp.padreReferencia, 50) + // f470_referencia_item_padre
+    pA("",    20) +                // f470_codigo_barras_padre
+    pA("",    20) +                // f470_id_ext1_detalle_padre
+    pA("",    20) +                // f470_id_ext2_detalle_padre
+    pN(0,     10) +                // f470_numero_operacion (vacío)
+    pN(0,      7) +                // f470_id_item_comp   (vacío)
+    pA(comp.hijoReferencia,  50) + // f470_referencia_item_comp
+    pA("",    20) +                // f470_codigo_barras_comp
+    pA("",    20) +                // f470_id_ext1_detalle_comp
+    pA("",    20) +                // f470_id_ext2_detalle_comp
+    pA(comp.bodegaId,   5) +       // f470_id_bodega
+    pA("",    10) +                // f470_id_ubicacion_aux
+    pA("",    15) +                // f470_id_lote
+    pN(701,    3) +                // f470_id_concepto    = 701
+    pA("01",   2) +                // f470_id_motivo      = 01
+    pA(centroOperacion,  3) +      // f470_id_co_movto
+    pA("31",  20) +                // f470_id_un_movto
+    pA("70010401", 15) +           // f470_id_ccosto_movto
+    pA("",    15) +                // f470_id_proyecto
+    pA(comp.hijoUnidad,  4) +      // f470_id_unidad_medida
+    pQ(comp.cantidadPendiente, 15, 4) + // f470_cant_base  (20 chars)
+    pQ(0,     15, 4) +             // f470_cant_2         (20 chars)
+    pA("",   255) +                // f470_notas
+    pA("",  2000)                  // f470_desc_varible
+  );
+
+  const closingNum = componentes.length + 3;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+
+  return [opening, encabezado, ...productLines, closing].join("\n");
+}
 
 // ── POST handler ───────────────────────────────────────────────────────────
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -21,18 +126,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params;
     const filtroId = Number(id);
 
-    const body = await req.json() as {
-      bache: number; consecOpg: number;
-      xml1: string; xml2: string; xml3: string;
-    };
-    const { bache, consecOpg, xml1, xml2, xml3 } = body;
+    // Obtener el filtro para construir XML2 server-side
+    const filtro = await prisma.exportProduccion.findUnique({ where: { id: filtroId } });
+    if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
 
-    if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },    { status: 400 });
-    if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo (consecOpg)" },   { status: 400 });
+    const body = await req.json() as {
+      bache: number;
+      consecOpg: number;
+      xml1: string;
+    };
+    const { bache, consecOpg, xml1 } = body;
+
+    if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
+    if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo (consecOpg)" }, { status: 400 });
 
     const numeroOpg = consecOpg;
 
-    // 1. Crear registro inicial en OpgLog
+    // Fecha del filtro en YYYYMMDD
+    const fechaYMD = (raw: Date | string): string => {
+      const s = typeof raw === "string" ? raw : raw.toISOString();
+      return s.slice(0, 10).replace(/-/g, "");
+    };
+    const fecha = fechaYMD(filtro.fecha);
+
+    // 1. Crear registro inicial en OpgLog (xml2/xml3 se actualizarán después)
     const log = await prisma.opgLog.create({
       data: {
         tipoDocumento: "OPG",
@@ -40,31 +157,55 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         numeroBache:  String(bache),
         filtroId,
         xml1,
-        xml2,
-        xml3,
         estadoOrdenProduccion:   "PENDIENTE",
         estadoConsumoProduccion: "PENDIENTE",
         estadoEntregaProduccion: "PENDIENTE",
       },
     });
 
-    // 2. Enviar documentos al ERP
+    // 2. Enviar XML1 — Orden de Producción
     const pendiente: DocResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: "" };
     let ordenResult:   DocResult = pendiente;
     let consumoResult: DocResult = pendiente;
     let entregaResult: DocResult = pendiente;
+    let xml2 = "";
+    let xml3 = "";
+    let componentes: ComponenteOP[] = [];
 
-    try { ordenResult  = await callSoap(xml1); }
-    catch (e) { ordenResult  = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) }; }
+    try { ordenResult = await callSoap(xml1); }
+    catch (e) { ordenResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) }; }
 
+    // 3. Si la orden fue exitosa, consultar componentes y construir + enviar XML2
     if (ordenResult.exitoso) {
-      try { consumoResult = await callSoap(xml2); }
-      catch (e) { consumoResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) }; }
+      try {
+        componentes = await queryComponentesOP(
+          filtro.centroOperacion?.trim() ?? "",
+          "OPG",
+          consecOpg,
+        );
+
+        xml2 = buildXML2(
+          filtro.centroOperacion?.trim() ?? "",
+          filtro.nombre,
+          fecha,
+          consecOpg,
+          componentes,
+        );
+
+        // Persistir XML2 en el log
+        await prisma.opgLog.update({ where: { id: log.id }, data: { xml2 } });
+
+        consumoResult = await callSoap(xml2);
+      } catch (e) {
+        consumoResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) };
+      }
     }
 
+    // 4. XML3 — Entrega de Producción (pendiente de definición)
     if (ordenResult.exitoso && consumoResult.exitoso) {
-      try { entregaResult = await callSoap(xml3); }
-      catch (e) { entregaResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) }; }
+      xml3 = "// Pendiente de definición";
+      // try { entregaResult = await callSoap(xml3); }
+      // catch (e) { entregaResult = { ... }; }
     }
 
     const estadoOrden   = ordenResult.exitoso   ? "ENVIADO" : "ERROR";
@@ -73,10 +214,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const estadoEntrega = entregaResult.exitoso  ? "ENVIADO"
       : (entregaResult.printTipoError === -1 && (!ordenResult.exitoso || !consumoResult.exitoso) ? "PENDIENTE" : "ERROR");
 
-    // 3. Actualizar log
+    // 5. Actualizar log con todos los resultados
     await prisma.opgLog.update({
       where: { id: log.id },
       data: {
+        xml3,
         estadoOrdenProduccion:      estadoOrden,
         estadoConsumoProduccion:    estadoConsumo,
         estadoEntregaProduccion:    estadoEntrega,
@@ -90,6 +232,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({
       logId: log.id,
       numeroOpg,
+      xml2,   // devuelto para que la página lo muestre
       orden:   { exitoso: ordenResult.exitoso,   errores: ordenResult.errores,   estado: estadoOrden },
       consumo: { exitoso: consumoResult.exitoso,  errores: consumoResult.errores, estado: estadoConsumo },
       entrega: { exitoso: entregaResult.exitoso,  errores: entregaResult.errores, estado: estadoEntrega },
