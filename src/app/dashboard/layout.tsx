@@ -9,14 +9,17 @@ const pageTitles: Record<string, string> = {
   "/dashboard/employees": "Empleados",
   "/dashboard/users": "Usuarios",
   "/dashboard/reports": "Reportes",
-  "/dashboard/export-production": "Exportar Producción",
+  "/dashboard/export-production": "Exportar Salida Desprese",
+  "/dashboard/export-entrada":    "Exportar Entrada Desprese",
   "/dashboard/settings": "Configuración",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const title = pageTitles[pathname]
-    ?? (pathname.startsWith("/dashboard/export-production/") ? "Exportar Producción" : "Dashboard");
+    ?? (pathname.startsWith("/dashboard/export-production/") ? "Exportar Salida Desprese"
+      : pathname.startsWith("/dashboard/export-entrada/")   ? "Exportar Entrada Desprese"
+      : "Dashboard");
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
