@@ -9,8 +9,8 @@ const pageTitles: Record<string, string> = {
   "/dashboard/employees": "Empleados",
   "/dashboard/users": "Usuarios",
   "/dashboard/reports": "Reportes",
-  "/dashboard/export-production": "Exportar Salida Desprese",
   "/dashboard/export-entrada":    "Exportar Entrada Desprese",
+  "/dashboard/export-production": "Exportar Salida Desprese",
   "/dashboard/settings": "Configuración",
 };
 
