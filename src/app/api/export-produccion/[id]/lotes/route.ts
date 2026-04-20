@@ -135,10 +135,17 @@ export async function POST(req: Request) {
     // ── 4. Si fue exitoso, persistir los lotes creados ────────────────────
     let creados: ProductoLote[] = [];
     if (result.exitoso) {
-      await prisma.loteCreado.createMany({
-        data:           nuevos.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })),
-        skipDuplicates: true,
-      });
+      // createMany con skipDuplicates no está soportado en SQL Server;
+      // se usa upsert individual para cada lote (idempotente ante race conditions).
+      await Promise.all(
+        nuevos.map((p) =>
+          prisma.loteCreado.upsert({
+            where:  { codigoProducto_lote: { codigoProducto: p.codigo, lote: p.lote } },
+            create: { codigoProducto: p.codigo, lote: p.lote },
+            update: {},
+          })
+        )
+      );
       creados = nuevos;
     }
 
