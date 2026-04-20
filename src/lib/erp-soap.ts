@@ -101,20 +101,45 @@ ${lineas}
 // ── Llamada SOAP → DocResult ───────────────────────────────────────────────
 // SOAP devuelve HTTP 500 para faults pero el cuerpo sigue siendo XML válido.
 // Siempre se lee el texto; parseSoapRespuesta determina éxito/error.
+// Se usa AbortController para cortar la espera a los 60 s y exponer la causa
+// real del error de red (ECONNREFUSED, ETIMEDOUT, etc.).
 export async function callSoap(lineasTexto: string): Promise<DocResult> {
   const url = process.env.ERP_SOAP_URL ?? "";
   if (!url) throw new Error("ERP_SOAP_URL no está configurada en .env");
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml;charset=utf-8",
-      SOAPAction: `"http://tempuri.org/ImportarXML"`,
-    },
-    body: buildEnvelope(lineasTexto),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000); // 60 s
 
-  const text = await res.text();
-  if (!text) throw new Error(`HTTP ${res.status} — sin cuerpo en la respuesta SOAP`);
-  return parseSoapRespuesta(text);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml;charset=utf-8",
+        SOAPAction: `"http://tempuri.org/ImportarXML"`,
+      },
+      body: buildEnvelope(lineasTexto),
+      signal: controller.signal,
+    });
+
+    const text = await res.text();
+    if (!text) throw new Error(`HTTP ${res.status} — sin cuerpo en la respuesta SOAP`);
+    return parseSoapRespuesta(text);
+  } catch (err) {
+    // AbortController disparado: tiempo de espera agotado
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Tiempo de espera agotado al conectar con el ERP (60 s). URL: ${url}`);
+    }
+    // fetch failed: exponer la causa subyacente (ECONNREFUSED, ENOTFOUND, etc.)
+    if (
+      err instanceof TypeError &&
+      err.message === "fetch failed" &&
+      "cause" in err &&
+      err.cause instanceof Error
+    ) {
+      throw new Error(`Error de red SOAP [${err.cause.message}] → ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }

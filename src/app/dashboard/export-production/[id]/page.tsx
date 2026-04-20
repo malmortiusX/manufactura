@@ -84,6 +84,70 @@ function pQ(val: number, intLen: number, dec: number): string {
   return intPart.padStart(intLen, "0") + "." + decPart.padEnd(dec, "0");
 }
 
+// ── Suma N días a fecha YYYYMMDD ──────────────────────────────────────────
+function sumarDias(fechaYMD: string, dias: number): string {
+  const y  = parseInt(fechaYMD.slice(0, 4), 10);
+  const m  = parseInt(fechaYMD.slice(4, 6), 10) - 1;
+  const d  = parseInt(fechaYMD.slice(6, 8), 10);
+  const dt = new Date(y, m, d);
+  dt.setDate(dt.getDate() + dias);
+  return [
+    String(dt.getFullYear()),
+    String(dt.getMonth() + 1).padStart(2, "0"),
+    String(dt.getDate()).padStart(2, "0"),
+  ].join("");
+}
+
+// ── Generador XML Lotes — Tipo 403 ────────────────────────────────────────
+function buildXMLLotes(rows: ProductRow[], fecha: string): string {
+  // Deduplicar por (codigo, lote), solo filas con lote
+  const productos = Array.from(
+    new Map(
+      rows
+        .filter((r) => r.LOTE_PRODUCTO?.trim())
+        .map((r) => [
+          `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
+          { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
+        ])
+    ).values()
+  );
+
+  if (productos.length === 0) return "// Sin lotes — no se generará XML de lotes";
+
+  const fechaVcto = sumarDias(fecha, 30);
+  const opening   = "000000100000001001";
+
+  const lines = productos.map((p, i) =>
+    pN(i + 2, 7) +              // F_NUMERO_REG
+    pN(403,   4) +              // F_TIPO_REG    = 403
+    pN(0,     2) +              // F_SUBTIPO_REG = 00
+    pN(2,     2) +              // F_VERSION_REG = 02
+    pN(1,     3) +              // F_CIA         = 1
+    pN(0,     1) +              // F_ACTUALIZA_REG = 0
+    pA(p.lote,   15) +          // f403_id (lote)
+    pN(0,      7) +             // f403_id_item (vacío)
+    pA(p.codigo, 50) +          // f403_referencia_item
+    pA("",       20) +          // f403_codigo_barras
+    pA("",       20) +          // f403_id_ext1_detalle
+    pA("",       20) +          // f403_id_ext2_detalle
+    pA("",        3) +          // f403_id_descripcion_tecnica
+    pN(1,      1) +             // f403_ind_estado = 1
+    pA(fecha,    8) +           // f403_fecha_creacion
+    pA(fechaVcto, 8) +          // f403_fecha_vcto (+30 días)
+    pA("",       15) +          // f403_lote_prov
+    pA("",       15) +          // f403_id_tercero_prov
+    pA("",        3) +          // f403_id_sucursal_prov
+    pA("",       40) +          // f403_fabricante
+    pA("",       15) +          // f403_num_lote_fabricante
+    pA("",        8) +          // f403_fecha_manufactura
+    pA("Creado por plano", 255) // f403_notas
+  );
+
+  const closingNum = productos.length + 2;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+  return [opening, ...lines, closing].join("\n");
+}
+
 // ── Generador XML 1 — Orden de Producción ─────────────────────────────────
 function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
   const fecha = fechaYMD(filtro.fecha);
@@ -309,12 +373,7 @@ function DocResultPanel({
 }
 
 // ── Panel de resultado de creación de lotes ───────────────────────────────
-function LotesResultPanel({
-  result, onVerXml,
-}: {
-  result: LoteCreacionResult;
-  onVerXml?: () => void;
-}) {
+function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   const todoOmitidos = result.omitidos.length > 0 && result.nuevos.length === 0;
   const hayErrores   = !result.exitoso && result.nuevos.length > 0;
 
@@ -399,15 +458,6 @@ function LotesResultPanel({
         </p>
       )}
 
-      {/* Ver XML de lotes */}
-      {result.xmlLotes && onVerXml && (
-        <button
-          onClick={onVerXml}
-          className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2"
-        >
-          Ver XML de lotes enviado
-        </button>
-      )}
     </div>
   );
 }
@@ -433,8 +483,7 @@ export default function ExportDetailPage() {
   const [retrying, setRetrying]             = useState(false);
 
   // Estado del subproceso de lotes
-  const [lotesResult, setLotesResult]   = useState<LoteCreacionResult | null>(null);
-  const [showXmlLotes, setShowXmlLotes] = useState(false);
+  const [lotesResult, setLotesResult] = useState<LoteCreacionResult | null>(null);
 
   const marcarLote = useCallback(async () => {
     setLoading(true);
@@ -442,7 +491,6 @@ export default function ExportDetailPage() {
     setTransmitResult(null);
     setTransmitError(null);
     setLotesResult(null);
-    setShowXmlLotes(false);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/results`, { method: "POST" });
       const text = await res.text();
@@ -464,9 +512,10 @@ export default function ExportDetailPage() {
   const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
-  const xml1 = filtro ? buildXML1(filtro, rows, consecOpg) : "";
-  const xml2 = "// Pendiente de definición";
-  const xml3 = "// Pendiente de definición";
+  const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
+  const xml1     = filtro ? buildXML1(filtro, rows, consecOpg) : "";
+  const xml2     = "// Pendiente de definición";
+  const xml3     = "// Pendiente de definición";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -475,7 +524,6 @@ export default function ExportDetailPage() {
       setTransmitting(true);
       setTransmitResult(null);
       setLotesResult(null);
-      setShowXmlLotes(false);
     }
     setTransmitError(null);
 
@@ -648,13 +696,7 @@ export default function ExportDetailPage() {
       {lotesResult && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
           <p className="text-sm font-semibold text-slate-700">Paso 1 — Registro de lotes</p>
-          <LotesResultPanel
-            result={lotesResult}
-            onVerXml={lotesResult.xmlLotes ? () => setShowXmlLotes((v) => !v) : undefined}
-          />
-          {showXmlLotes && lotesResult.xmlLotes && (
-            <XmlBlock title="XML Lotes (tipo 403)" content={lotesResult.xmlLotes} />
-          )}
+          <LotesResultPanel result={lotesResult} />
         </div>
       )}
 
@@ -729,6 +771,7 @@ export default function ExportDetailPage() {
           </div>
 
           {/* XMLs */}
+          <XmlBlock title="XML Lotes — Tipo 403"           content={xmlLotes} />
           <XmlBlock title="XML 1 — Orden de Producción"   content={xml1} />
           <XmlBlock title="XML 2 — Consumo de Producción" content={xml2} />
           <XmlBlock title="XML 3 — Entrega de Producción" content={xml3} />
