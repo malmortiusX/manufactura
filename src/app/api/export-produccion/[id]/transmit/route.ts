@@ -76,8 +76,9 @@ function buildXML2(
   // ── Líneas de componentes tipo 470 (2673 chars c/u) ──────────────────────
   // Longitudes: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+10+7+50+20+20+20+5+10+15+3+2+3+20+15+15+4+20+20+255+2000 = 2673
   const productLines = componentes.map((comp, i) => {
-    // Lote del producto padre: se busca por código (trim para quitar espacios ERP)
-    const lotePadre = lotesPorProducto[comp.padreReferencia.trim()] ?? "";
+    // Solo PI00001 lleva lote; los demás componentes van en blanco.
+    const esPi = comp.hijoReferencia.trim() === "PI00001";
+    const lotePadre = esPi ? (lotesPorProducto[comp.padreReferencia.trim()] ?? "") : "";
 
     return (
     pN(i + 3,  7) +                // F_NUMERO-REG        (3, 4, 5…)
