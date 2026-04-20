@@ -132,6 +132,17 @@ model OpgLog {
   updatedAt DateTime @updatedAt
 }
 
+// ── Registro de lotes creados en ERP ─────────────────────────────────────
+// Evita intentar crear el mismo lote dos veces (ERP arroja error si ya existe).
+model LoteCreado {
+  id             Int      @id @default(autoincrement())
+  codigoProducto String   @db.VarChar(50)
+  lote           String   @db.VarChar(15)
+  createdAt      DateTime @default(now())
+
+  @@unique([codigoProducto, lote])
+}
+
 model Employee {
   id         Int      @id @default(autoincrement())
   name       String

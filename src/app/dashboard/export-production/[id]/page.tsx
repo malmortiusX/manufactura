@@ -47,11 +47,23 @@ interface DocResult {
 }
 
 interface TransmitResult {
-  logId:    number;
+  logId:     number;
   numeroOpg: number;
-  orden:   DocResult;
-  consumo: DocResult;
-  entrega: DocResult;
+  orden:     DocResult;
+  consumo:   DocResult;
+  entrega:   DocResult;
+}
+
+interface ProductoLote { codigo: string; lote: string; }
+
+interface LoteCreacionResult {
+  exitoso:  boolean;
+  omitidos: ProductoLote[];
+  nuevos:   ProductoLote[];
+  creados:  ProductoLote[];
+  errores:  ErpError[];
+  xmlLotes: string | null;
+  error?:   string;
 }
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
@@ -72,88 +84,72 @@ function pQ(val: number, intLen: number, dec: number): string {
   return intPart.padStart(intLen, "0") + "." + decPart.padEnd(dec, "0");
 }
 
-// ── Generador XML 1 ────────────────────────────────────────────────────────
+// ── Generador XML 1 — Orden de Producción ─────────────────────────────────
 function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
   const fecha = fechaYMD(filtro.fecha);
   const opening = "000000100000001001";
 
-  // Longitudes: 7+4+2+2+3+1+3+3+8+8+1+1+3+15+3+8+3+3+30+30+30+2000+3+3+8 = 2182
   const header =
-    pN(2,   7) +                             // F_NUMERO-REG          = 2
-    pN(850, 4) +                             // F_TIPO-REG            = 850
-    pN(0,   2) +                             // F_SUBTIPO-REG         = 00
-    pN(1,   2) +                             // F_VERSION-REG         = 01
-    pN(1,   3) +                             // F_CIA                 = 1
-    pN(0,   1) +                             // F_CONSEC_AUTO_REG     = 0 (manual)
-    pA(filtro.centroOperacion,    3) +       // f850_id_co
-    pA("OPG",                     3) +       // f850_id_tipo_docto    = OPG
-    pN(consecOpg, 8) +                       // f850_consec_docto     (SEQ_OPG)
-    pA(fecha,                     8) +       // f850_fecha            YYYYMMDD
-    pN(1,   1) +                             // f850_ind_estado       = 1
-    pN(0,   1) +                             // f850_ind_impresion    = 0
-    pN(701, 3) +                             // f850_id_clase_docto   = 701
-    pA(filtro.terceroPlanificador, 15) +     // f850_tercero_planificador
-    pA("OPG",                     3) +       // f850_id_tipo_docto_op_padre = OPG
-    pN(1,   8) +                             // f850_consec_docto_op_padre  = 1
-    pA(filtro.instalacion,        3) +       // f850_id_instalacion
-    pA("002",                     3) +       // f850_clase_op         = 002
-    pA("",                        30) +      // f850_referencia_1
-    pA("",                        30) +      // f850_referencia_2
-    pA("",                        30) +      // f850_referencia_3
-    pA(filtro.nombre,             2000) +    // f850_notas
-    pA("",                        3) +       // f850_id_co_pv
-    pA("",                        3) +       // f850_id_tipo_docto_pv
-    pN(0,   8);                              // f850_consec_docto_pv
+    pN(2,   7) + pN(850, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) + pN(0, 1) +
+    pA(filtro.centroOperacion,    3) +
+    pA("OPG",                     3) +
+    pN(consecOpg, 8) +
+    pA(fecha,                     8) +
+    pN(1,   1) + pN(0, 1) + pN(701, 3) +
+    pA(filtro.terceroPlanificador, 15) +
+    pA("OPG",                     3) +
+    pN(1,   8) +
+    pA(filtro.instalacion,        3) +
+    pA("002",                     3) +
+    pA("",                        30) +
+    pA("",                        30) +
+    pA("",                        30) +
+    pA(filtro.nombre,             2000) +
+    pA("",                        3) +
+    pA("",                        3) +
+    pN(0,   8);
 
-  // Longitudes por línea de producto: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+4+8+20+8+8+4+5+4+15+2000+5 = 2240
   const productLines = rows.map((row, i) => {
     const nroRegistro = i + 1;
     const bodega = pA(filtro.bodegaItemPadre ?? row.BODEGA, 5);
     return (
-      pN(i + 3,  7) +                         // F_NUMERO-REG          (3, 4, 5…)
-      pN(851,    4) +                         // F_TIPO-REG            = 851
-      pN(0,      2) +                         // F_SUBTIPO-REG         = 00
-      pN(1,      2) +                         // F_VERSION-REG         = 01
-      pN(1,      3) +                         // F_CIA                 = 1
-      pA(filtro.centroOperacion,  3) +        // f851_id_co
-      pA("OPG",                   3) +        // f851_id_tipo_docto    = OPG
-      pN(consecOpg, 8) +                      // f851_consec_docto     (SEQ_OPG)
-      pN(nroRegistro,            10) +        // f851_nro_registro
-      pN(0,      7) +                         // f851_id_item          (vacío)
-      pA(row.CODIGO_PRODUCTO,    50) +        // f851_referencia_item
-      pA("",                     20) +        // f851_codigo_barras
-      pA("",                     20) +        // f851_id_ext1_detalle
-      pA("",                     20) +        // f851_id_ext2_detalle
-      pA(row.UNIDAD_PRODUCTO,     4) +        // f851_id_unidad_medida
-      pN(100,    8) +                         // f851_porc_rendimiento = 100
-      pQ(Number(row.KIL),        15, 4) +     // f851_cant_planeada_base (20 chars)
-      pA(fecha,                   8) +        // f851_fecha_inicio
-      pA(fecha,                   8) +        // f851_fecha_terminacion
-      pA("0001",                  4) +        // f851_id_metodo_lista  = 0001
-      bodega +                                // f851_id_bodega_componentes
-      pA("",                      4) +        // f851_id_metodo_ruta
-      pA(row.LOTE_PRODUCTO,      15) +        // f851_id_lote
-      pA("",                   2000) +        // f851_notas
-      bodega                                  // f851_id_bodega
+      pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
+      pA(filtro.centroOperacion,  3) +
+      pA("OPG",                   3) +
+      pN(consecOpg, 8) +
+      pN(nroRegistro,            10) +
+      pN(0,      7) +
+      pA(row.CODIGO_PRODUCTO,    50) +
+      pA("",                     20) +
+      pA("",                     20) +
+      pA("",                     20) +
+      pA(row.UNIDAD_PRODUCTO,     4) +
+      pN(100,    8) +
+      pQ(Number(row.KIL),        15, 4) +
+      pA(fecha,                   8) +
+      pA(fecha,                   8) +
+      pA("0001",                  4) +
+      bodega +
+      pA("",                      4) +
+      pA(row.LOTE_PRODUCTO,      15) +
+      pA("",                   2000) +
+      bodega
     );
   });
 
   const closingNum = rows.length + 3;
   const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
-
   return [opening, header, ...productLines, closing].join("\n");
 }
 
-// ── Componente de bloque XML ───────────────────────────────────────────────
+// ── Componente: bloque XML con copiar ─────────────────────────────────────
 function XmlBlock({ title, content }: { title: string; content: string }) {
   const [copied, setCopied] = useState(false);
-
   function handleCopy() {
     navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
-
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
@@ -191,7 +187,7 @@ function XmlBlock({ title, content }: { title: string; content: string }) {
   );
 }
 
-// ── Badge de estado por documento ─────────────────────────────────────────
+// ── Badge de estado ────────────────────────────────────────────────────────
 function EstadoBadge({ estado }: { estado: EstadoDoc }) {
   if (estado === "ENVIADO")
     return (
@@ -232,17 +228,15 @@ function DocResultPanel({
 }) {
   return (
     <div className={`rounded-xl border p-4 space-y-3 ${
-      result.estado === "ENVIADO"  ? "border-emerald-200 bg-emerald-50" :
-      result.estado === "ERROR"    ? "border-red-200 bg-red-50" :
-                                     "border-slate-200 bg-slate-50"
+      result.estado === "ENVIADO" ? "border-emerald-200 bg-emerald-50" :
+      result.estado === "ERROR"   ? "border-red-200 bg-red-50" :
+                                    "border-slate-200 bg-slate-50"
     }`}>
-      {/* Cabecera */}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-700">{label}</span>
         <EstadoBadge estado={result.estado} />
       </div>
 
-      {/* Éxito */}
       {result.exitoso && (
         <p className="text-xs text-emerald-700 flex items-center gap-1.5">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -252,7 +246,6 @@ function DocResultPanel({
         </p>
       )}
 
-      {/* Errores parseados del diffgram */}
       {result.errores.length > 0 && (
         <div className="space-y-2">
           {result.errores.map((e, i) => (
@@ -272,15 +265,12 @@ function DocResultPanel({
                   </span>
                 )}
               </div>
-              {e.detalle && (
-                <p className="text-xs text-red-800 font-medium">{e.detalle}</p>
-              )}
+              {e.detalle && <p className="text-xs text-red-800 font-medium">{e.detalle}</p>}
             </div>
           ))}
         </div>
       )}
 
-      {/* Fallback: error sin errores parseados — muestra respuesta cruda */}
       {result.estado === "ERROR" && !result.exitoso && result.errores.length === 0 && (
         <details className="group">
           <summary className="text-xs text-red-600 font-medium cursor-pointer select-none list-none flex items-center gap-1.5">
@@ -290,35 +280,132 @@ function DocResultPanel({
             Ver respuesta del ERP
           </summary>
           <pre className="mt-2 text-[10px] text-slate-500 font-mono whitespace-pre-wrap break-all bg-white border border-red-100 rounded-lg p-2 max-h-48 overflow-y-auto">
-            {result.respuestaRaw || "Sin respuesta"}
+            {/* respuestaRaw is not in DocResult client-side; fallback text */}
+            Sin respuesta
           </pre>
         </details>
       )}
 
-      {/* Pendiente (no se envió porque un documento anterior falló) */}
       {result.estado === "PENDIENTE" && !result.exitoso && result.errores.length === 0 && (
         <p className="text-xs text-slate-500">
           No se envió — depende de que el documento anterior sea exitoso.
         </p>
       )}
 
-      {/* Botón reintentar — visible siempre que hay error y hay handler */}
       {result.estado === "ERROR" && onReintentar && (
         <button
           onClick={onReintentar}
           disabled={retrying}
           className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 px-3 py-1.5 rounded-lg transition-colors"
         >
-          {retrying ? (
-            <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          ) : (
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          )}
+          <svg className={`w-3.5 h-3.5 ${retrying ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
           Reintentar transmisión
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Panel de resultado de creación de lotes ───────────────────────────────
+function LotesResultPanel({
+  result, onVerXml,
+}: {
+  result: LoteCreacionResult;
+  onVerXml?: () => void;
+}) {
+  const todoOmitidos = result.omitidos.length > 0 && result.nuevos.length === 0;
+  const hayErrores   = !result.exitoso && result.nuevos.length > 0;
+
+  return (
+    <div className={`rounded-xl border p-4 space-y-3 ${
+      hayErrores    ? "border-amber-200 bg-amber-50"  :
+      todoOmitidos  ? "border-slate-200 bg-slate-50"  :
+                      "border-emerald-200 bg-emerald-50"
+    }`}>
+      {/* Cabecera */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <svg className={`w-4 h-4 ${hayErrores ? "text-amber-500" : "text-emerald-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <span className="text-xs font-semibold text-slate-700">Registro de Lotes</span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {result.omitidos.length > 0 && (
+            <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full font-medium">
+              {result.omitidos.length} ya existían
+            </span>
+          )}
+          {result.nuevos.length > 0 && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+              hayErrores
+                ? "bg-amber-100 text-amber-700 border-amber-200"
+                : "bg-emerald-100 text-emerald-700 border-emerald-200"
+            }`}>
+              {result.creados.length} / {result.nuevos.length} creados
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Todo omitido */}
+      {todoOmitidos && (
+        <p className="text-xs text-slate-500 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Todos los lotes ya estaban registrados — se omitió el envío al ERP.
+        </p>
+      )}
+
+      {/* Éxito con nuevos */}
+      {result.exitoso && result.nuevos.length > 0 && (
+        <p className="text-xs text-emerald-700 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Lotes creados exitosamente en ERP.
+        </p>
+      )}
+
+      {/* Errores ERP */}
+      {hayErrores && result.errores.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-amber-700">Errores al crear lotes:</p>
+          {result.errores.map((e, i) => (
+            <div key={i} className="rounded-lg bg-white border border-amber-100 px-3 py-2.5 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                  Línea {e.nroLinea}
+                </span>
+                {e.valor?.trim() && (
+                  <span className="font-mono text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                    {e.valor.trim()}
+                  </span>
+                )}
+              </div>
+              {e.detalle && <p className="text-xs text-amber-900 font-medium">{e.detalle}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Errores sin detalle */}
+      {hayErrores && result.errores.length === 0 && (
+        <p className="text-xs text-amber-700">
+          El ERP rechazó la creación de lotes. Verifique el XML enviado.
+        </p>
+      )}
+
+      {/* Ver XML de lotes */}
+      {result.xmlLotes && onVerXml && (
+        <button
+          onClick={onVerXml}
+          className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2"
+        >
+          Ver XML de lotes enviado
         </button>
       )}
     </div>
@@ -330,8 +417,8 @@ const fmtNum = (n: number) =>
   new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 export default function ExportDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  const { id }   = useParams<{ id: string }>();
+  const router   = useRouter();
 
   const [filtro, setFiltro]   = useState<Filtro | null>(null);
   const [rows, setRows]       = useState<ProductRow[]>([]);
@@ -345,11 +432,17 @@ export default function ExportDetailPage() {
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
 
+  // Estado del subproceso de lotes
+  const [lotesResult, setLotesResult]   = useState<LoteCreacionResult | null>(null);
+  const [showXmlLotes, setShowXmlLotes] = useState(false);
+
   const marcarLote = useCallback(async () => {
     setLoading(true);
     setError(null);
     setTransmitResult(null);
     setTransmitError(null);
+    setLotesResult(null);
+    setShowXmlLotes(false);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/results`, { method: "POST" });
       const text = await res.text();
@@ -378,10 +471,49 @@ export default function ExportDetailPage() {
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
     if (esReintento) setRetrying(true);
-    else { setTransmitting(true); setTransmitResult(null); }
+    else {
+      setTransmitting(true);
+      setTransmitResult(null);
+      setLotesResult(null);
+      setShowXmlLotes(false);
+    }
     setTransmitError(null);
+
     try {
-      // 1. Obtener el siguiente consecutivo de SEQ_OPG
+      // ── Paso 1: Crear/verificar lotes en ERP ──────────────────────────
+      // Deduplicar por (codigo, lote), excluir filas sin lote
+      const uniqueLotes: ProductoLote[] = Array.from(
+        new Map(
+          rows
+            .filter((r) => r.LOTE_PRODUCTO?.trim())
+            .map((r) => [
+              `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
+              { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
+            ])
+        ).values()
+      );
+
+      if (uniqueLotes.length > 0) {
+        const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ productos: uniqueLotes, fecha: fechaYMD(filtro.fecha) }),
+        });
+        const lotesText = await lotesRes.text();
+        if (!lotesText) throw new Error("Sin respuesta al crear lotes");
+        const lotesData: LoteCreacionResult = JSON.parse(lotesText);
+        if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
+        setLotesResult(lotesData);
+
+        // Si el SOAP de lotes falló, detener el proceso
+        if (!lotesData.exitoso && lotesData.nuevos.length > 0) {
+          setTransmitting(false);
+          setRetrying(false);
+          return;
+        }
+      }
+
+      // ── Paso 2: Obtener consecutivo OPG ───────────────────────────────
       const seqRes  = await fetch("/api/export-produccion/seq-opg", { method: "POST" });
       const seqText = await seqRes.text();
       if (!seqText) throw new Error("Sin respuesta al obtener SEQ_OPG");
@@ -390,14 +522,13 @@ export default function ExportDetailPage() {
       const nuevoConsec: number = seqData.consecOpg;
       setConsecOpg(nuevoConsec);
 
-      // 2. Construir XML con el consecutivo real
+      // ── Paso 3: Construir y transmitir XMLs ───────────────────────────
       const xml1Final = buildXML1(filtro, rows, nuevoConsec);
 
-      // 3. Transmitir al ERP
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final, xml2, xml3 }),
+        body:    JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final, xml2, xml3 }),
       });
       const text = await res.text();
       if (!text) throw new Error("El servidor no devolvió respuesta");
@@ -414,7 +545,7 @@ export default function ExportDetailPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
+      {/* Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.back()}
@@ -432,14 +563,13 @@ export default function ExportDetailPage() {
           {filtro && (
             <p className="text-xs text-slate-400 mt-0.5">
               {new Date(filtro.fecha.split("T")[0] + "T00:00:00").toLocaleDateString("es-CO")}
-              {filtro.tipoDocumento && <> · Tipo Doc: <span className="font-medium">{filtro.tipoDocumento}</span></>}
+              {filtro.tipoDocumento  && <> · Tipo Doc: <span className="font-medium">{filtro.tipoDocumento}</span></>}
               {filtro.tipoMovimiento && <> · Tipo Mov: <span className="font-medium">{filtro.tipoMovimiento}</span></>}
             </p>
           )}
         </div>
 
         <div className="ml-auto flex items-center gap-3">
-          {/* Badge de lote */}
           {bache !== null && (
             <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold px-3 py-1.5 rounded-xl">
               <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -449,7 +579,6 @@ export default function ExportDetailPage() {
             </div>
           )}
 
-          {/* Badge consecutivo OPG */}
           {consecOpg > 0 && (
             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-xl">
               <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -459,7 +588,6 @@ export default function ExportDetailPage() {
             </div>
           )}
 
-          {/* Actualizar */}
           <button
             onClick={marcarLote}
             disabled={loading || transmitting}
@@ -471,10 +599,9 @@ export default function ExportDetailPage() {
             Actualizar
           </button>
 
-          {/* Transmitir al ERP */}
           {!loading && rows.length > 0 && (
             <button
-              onClick={transmitir}
+              onClick={() => transmitir(false)}
               disabled={transmitting || loading}
               className="flex items-center gap-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-4 py-2 rounded-xl transition-all shadow-sm"
             >
@@ -498,7 +625,7 @@ export default function ExportDetailPage() {
         </div>
       </div>
 
-      {/* Error de carga */}
+      {/* Errores de carga / transmisión ─────────────────────────────────── */}
       {error && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -508,7 +635,6 @@ export default function ExportDetailPage() {
         </div>
       )}
 
-      {/* Error de transmisión */}
       {transmitError && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -518,18 +644,32 @@ export default function ExportDetailPage() {
         </div>
       )}
 
-      {/* Resultado de transmisión */}
+      {/* Panel de lotes ──────────────────────────────────────────────────── */}
+      {lotesResult && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+          <p className="text-sm font-semibold text-slate-700">Paso 1 — Registro de lotes</p>
+          <LotesResultPanel
+            result={lotesResult}
+            onVerXml={lotesResult.xmlLotes ? () => setShowXmlLotes((v) => !v) : undefined}
+          />
+          {showXmlLotes && lotesResult.xmlLotes && (
+            <XmlBlock title="XML Lotes (tipo 403)" content={lotesResult.xmlLotes} />
+          )}
+        </div>
+      )}
+
+      {/* Panel de transmisión ────────────────────────────────────────────── */}
       {transmitResult && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-          {/* Cabecera del panel */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-slate-700">Resultado de transmisión</span>
+              <span className="text-sm font-semibold text-slate-700">
+                {lotesResult ? "Paso 2 — " : ""}Resultado de transmisión
+              </span>
               <span className="text-xs font-semibold bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full">
                 OPG #{transmitResult.numeroOpg}
               </span>
             </div>
-            {/* Resumen global */}
             {transmitResult.orden.exitoso && transmitResult.consumo.exitoso && transmitResult.entrega.exitoso ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -547,7 +687,6 @@ export default function ExportDetailPage() {
             )}
           </div>
 
-          {/* Documentos */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <DocResultPanel
               label="Orden de Producción"
@@ -596,7 +735,7 @@ export default function ExportDetailPage() {
         </>
       )}
 
-      {/* Tabla */}
+      {/* Tabla de productos ──────────────────────────────────────────────── */}
       {(rows.length > 0 || loading) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -615,33 +754,33 @@ export default function ExportDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                      {Array.from({ length: 9 }).map((__, j) => (
-                        <td key={j} className="px-5 py-4">
-                          <div className="h-4 bg-slate-100 rounded w-3/4" />
+                {loading
+                  ? Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={i} className="animate-pulse">
+                        {Array.from({ length: 9 }).map((__, j) => (
+                          <td key={j} className="px-5 py-4">
+                            <div className="h-4 bg-slate-100 rounded w-3/4" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : rows.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-3 font-mono text-xs text-slate-700">{row.CODIGO_PRODUCTO}</td>
+                        <td className="px-5 py-3 text-slate-800 font-medium max-w-[220px] truncate">{row.DESCRIPCION_PRODUCTO}</td>
+                        <td className="px-5 py-3 text-slate-600">{row.BODEGA || "—"}</td>
+                        <td className="px-5 py-3 text-slate-600">{row.UBICACION || "—"}</td>
+                        <td className="px-5 py-3 text-slate-600">{row.LOTE_PRODUCTO || "—"}</td>
+                        <td className="px-5 py-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                            {row.UNIDAD_PRODUCTO}
+                          </span>
                         </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3 font-mono text-xs text-slate-700">{row.CODIGO_PRODUCTO}</td>
-                    <td className="px-5 py-3 text-slate-800 font-medium max-w-[220px] truncate">{row.DESCRIPCION_PRODUCTO}</td>
-                    <td className="px-5 py-3 text-slate-600">{row.BODEGA || "—"}</td>
-                    <td className="px-5 py-3 text-slate-600">{row.UBICACION || "—"}</td>
-                    <td className="px-5 py-3 text-slate-600">{row.LOTE_PRODUCTO || "—"}</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                        {row.UNIDAD_PRODUCTO}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.KIL))}</td>
-                    <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.UND))}</td>
-                    <td className="px-5 py-3 text-right text-slate-500 tabular-nums">{fmtNum(Number(row.PROMEDIO_PESO))}</td>
-                  </tr>
-                ))}
+                        <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.KIL))}</td>
+                        <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.UND))}</td>
+                        <td className="px-5 py-3 text-right text-slate-500 tabular-nums">{fmtNum(Number(row.PROMEDIO_PESO))}</td>
+                      </tr>
+                    ))}
               </tbody>
               {!loading && rows.length > 0 && (
                 <tfoot>
