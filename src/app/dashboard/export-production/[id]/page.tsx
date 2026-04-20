@@ -576,10 +576,18 @@ export default function ExportDetailPage() {
       // ── Paso 3: Construir y transmitir — XML2 se construye server-side ───
       const xml1Final = buildXML1(filtro, rows, nuevoConsec);
 
+      // Mapa código → lote para que el servidor pueda llenar f470_id_lote en XML2
+      const lotesPorProducto: Record<string, string> = {};
+      rows.forEach((r) => {
+        const codigo = r.CODIGO_PRODUCTO.trim();
+        const lote   = r.LOTE_PRODUCTO?.trim() ?? "";
+        if (codigo) lotesPorProducto[codigo] = lote;
+      });
+
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final }),
+        body:    JSON.stringify({ bache, consecOpg: nuevoConsec, xml1: xml1Final, lotesPorProducto }),
       });
       const text = await res.text();
       if (!text) throw new Error("El servidor no devolvió respuesta");

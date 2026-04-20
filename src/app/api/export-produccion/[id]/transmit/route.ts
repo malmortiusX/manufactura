@@ -41,11 +41,12 @@ function pQ(val: number, intLen: number, dec: number): string {
 //   Líneas 3…N+2 : componentes tipo 470 (2673 chars cada uno)
 //   Línea N+3 : cierre
 function buildXML2(
-  centroOperacion: string,
-  nombre:          string,
-  fecha:           string,   // YYYYMMDD
-  consecOpg:       number,
-  componentes:     ComponenteOP[],
+  centroOperacion:  string,
+  nombre:           string,
+  fecha:            string,                    // YYYYMMDD
+  consecOpg:        number,
+  componentes:      ComponenteOP[],
+  lotesPorProducto: Record<string, string>,   // { codigoProducto: lote }
 ): string {
   const opening = "000000100000001001";
 
@@ -74,7 +75,11 @@ function buildXML2(
 
   // ── Líneas de componentes tipo 470 (2673 chars c/u) ──────────────────────
   // Longitudes: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+10+7+50+20+20+20+5+10+15+3+2+3+20+15+15+4+20+20+255+2000 = 2673
-  const productLines = componentes.map((comp, i) =>
+  const productLines = componentes.map((comp, i) => {
+    // Lote del producto padre: se busca por código (trim para quitar espacios ERP)
+    const lotePadre = lotesPorProducto[comp.padreReferencia.trim()] ?? "";
+
+    return (
     pN(i + 3,  7) +                // F_NUMERO-REG        (3, 4, 5…)
     pN(470,    4) +                // F_TIPO-REG          = 470
     pN(0,      2) +                // F_SUBTIPO-REG       = 00
@@ -97,7 +102,7 @@ function buildXML2(
     pA("",    20) +                // f470_id_ext2_detalle_comp
     pA(comp.bodegaId,   5) +       // f470_id_bodega
     pA("",    10) +                // f470_id_ubicacion_aux
-    pA("",    15) +                // f470_id_lote
+    pA(lotePadre,       15) +      // f470_id_lote  ← lote del Padre_Referencia
     pN(701,    3) +                // f470_id_concepto    = 701
     pA("01",   2) +                // f470_id_motivo      = 01
     pA(centroOperacion,  3) +      // f470_id_co_movto
@@ -109,7 +114,7 @@ function buildXML2(
     pQ(0,     15, 4) +             // f470_cant_2         (20 chars)
     pA("",   255) +                // f470_notas
     pA("",  2000)                  // f470_desc_varible
-  );
+  );});
 
   const closingNum = componentes.length + 3;
   const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
@@ -131,11 +136,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
 
     const body = await req.json() as {
-      bache: number;
-      consecOpg: number;
-      xml1: string;
+      bache:            number;
+      consecOpg:        number;
+      xml1:             string;
+      lotesPorProducto: Record<string, string>; // { codigoProducto: lote }
     };
-    const { bache, consecOpg, xml1 } = body;
+    const { bache, consecOpg, xml1, lotesPorProducto = {} } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo (consecOpg)" }, { status: 400 });
@@ -190,6 +196,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           fecha,
           consecOpg,
           componentes,
+          lotesPorProducto,
         );
 
         // Persistir XML2 en el log
