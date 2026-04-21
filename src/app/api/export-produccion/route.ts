@@ -4,11 +4,14 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
+  const modulo = req.nextUrl.searchParams.get("modulo");
+
   const registros = await prisma.exportProduccion.findMany({
+    where: modulo ? { modulo } : undefined,
     orderBy: { createdAt: "desc" },
   });
 
@@ -24,17 +27,18 @@ export async function POST(req: NextRequest) {
   try {
     const registro = await prisma.exportProduccion.create({
       data: {
-        identificador:      body.identificador,
-        nombre:             body.nombre,
-        bodega:             body.bodega          || null,
-        ubicacion:          body.ubicacion        || null,
-        tipoDocumento:      body.tipoDocumento    || null,
-        tipoMovimiento:     body.tipoMovimiento   || null,
-        fecha:              new Date(body.fecha),
-        centroOperacion:    body.centroOperacion  || null,
-        terceroPlanificador: body.terceroPlanificador || null,
-        instalacion:        body.instalacion      || null,
-        bodegaItemPadre:    body.bodegaItemPadre  || null,
+        identificador:       body.identificador,
+        nombre:              body.nombre,
+        bodega:              body.bodega              || null,
+        ubicacion:           body.ubicacion            || null,
+        tipoDocumento:       body.tipoDocumento        || null,
+        tipoMovimiento:      body.tipoMovimiento       || null,
+        fecha:               new Date(body.fecha),
+        centroOperacion:     body.centroOperacion      || null,
+        terceroPlanificador: body.terceroPlanificador  || null,
+        instalacion:         body.instalacion          || null,
+        bodegaItemPadre:     body.bodegaItemPadre      || null,
+        modulo:              body.modulo               || null,
       },
     });
     return NextResponse.json(registro, { status: 201 });

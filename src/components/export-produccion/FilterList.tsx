@@ -1,9 +1,10 @@
 "use client";
-// src/app/dashboard/export-production/page.tsx
+// src/components/export-produccion/FilterList.tsx
+// Lista CRUD de filtros compartida entre los 4 módulos de Exportar Producción.
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
-interface FilterSet {
+export interface FilterSet {
   id: number;
   identificador: string;
   nombre: string;
@@ -16,29 +17,47 @@ interface FilterSet {
   terceroPlanificador: string | null;
   instalacion: string | null;
   bodegaItemPadre: string | null;
+  modulo: string | null;
+}
+
+export type ModuloKey =
+  | "entrada-desprese"
+  | "salida-desprese"
+  | "entrada-beneficio"
+  | "salida-beneficio";
+
+const MODULO_LABELS: Record<ModuloKey, string> = {
+  "entrada-desprese":  "Entrada Desprese",
+  "salida-desprese":   "Salida Desprese",
+  "entrada-beneficio": "Entrada Beneficio",
+  "salida-beneficio":  "Salida Beneficio",
+};
+
+const MODULO_COLORS: Record<ModuloKey, string> = {
+  "entrada-desprese":  "bg-sky-50 text-sky-700 border-sky-200",
+  "salida-desprese":   "bg-violet-50 text-violet-700 border-violet-200",
+  "entrada-beneficio": "bg-teal-50 text-teal-700 border-teal-200",
+  "salida-beneficio":  "bg-orange-50 text-orange-700 border-orange-200",
+};
+
+interface Props {
+  modulo: ModuloKey;
+  /** Ruta base del módulo, p.ej. "/dashboard/export-produccion/salida-desprese" */
+  basePath: string;
+  /** Si el módulo tiene página de detalle ([id]) */
+  hasDetail?: boolean;
 }
 
 const today = new Date().toISOString().split("T")[0];
 
-const emptyForm = {
-  identificador: "",
-  nombre: "",
-  bodega: "",
-  ubicacion: "",
-  tipoDocumento: "",
-  tipoMovimiento: "",
-  fecha: today,
-  centroOperacion: "",
-  terceroPlanificador: "",
-  instalacion: "",
-  bodegaItemPadre: "",
-};
-
-const inputClass = "px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors placeholder:text-slate-300";
+const inputClass =
+  "px-3 py-2.5 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors placeholder:text-slate-300";
 const labelClass = "text-xs font-semibold text-slate-500 uppercase tracking-wider";
 const counterClass = "text-xs text-slate-400 text-right";
 
-function Field({ label, name, value, onChange, maxLength, placeholder, mono = false }: {
+function Field({
+  label, name, value, onChange, maxLength, placeholder, mono = false,
+}: {
   label: string; name: string; value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   maxLength: number; placeholder?: string; mono?: boolean;
@@ -60,7 +79,21 @@ function Field({ label, name, value, onChange, maxLength, placeholder, mono = fa
   );
 }
 
-export default function ExportProductionPage() {
+const emptyForm = {
+  identificador: "",
+  nombre: "",
+  bodega: "",
+  ubicacion: "",
+  tipoDocumento: "",
+  tipoMovimiento: "",
+  fecha: today,
+  centroOperacion: "",
+  terceroPlanificador: "",
+  instalacion: "",
+  bodegaItemPadre: "",
+};
+
+export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
   const [records, setRecords] = useState<FilterSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -76,16 +109,15 @@ export default function ExportProductionPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/export-produccion");
+      const res = await fetch(`/api/export-produccion?modulo=${modulo}`);
       if (!res.ok) throw new Error("Error al cargar los registros");
-      const data = await res.json();
-      setRecords(data);
+      setRecords(await res.json());
     } catch {
       setError("No se pudieron cargar los registros.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [modulo]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
@@ -139,11 +171,13 @@ export default function ExportProductionPage() {
     setError(null);
     try {
       const method = editingId ? "PUT" : "POST";
-      const url = editingId ? `/api/export-produccion/${editingId}` : "/api/export-produccion";
+      const url = editingId
+        ? `/api/export-produccion/${editingId}`
+        : "/api/export-produccion";
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, modulo }),
       });
       if (!res.ok) throw new Error();
       await fetchRecords();
@@ -172,6 +206,10 @@ export default function ExportProductionPage() {
   const fmt = (date: string) =>
     date ? new Date(date.split("T")[0] + "T00:00:00").toLocaleDateString("es-CO") : "—";
 
+  const moduloKey = modulo as ModuloKey;
+  const moduloLabel = MODULO_LABELS[moduloKey] ?? modulo;
+  const moduloColor = MODULO_COLORS[moduloKey] ?? "bg-slate-100 text-slate-600 border-slate-200";
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -190,7 +228,6 @@ export default function ExportProductionPage() {
         </button>
       </div>
 
-      {/* Error global */}
       {error && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -200,7 +237,7 @@ export default function ExportProductionPage() {
         </div>
       )}
 
-      {/* Table card */}
+      {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-100">
           <div className="relative max-w-xs">
@@ -221,10 +258,10 @@ export default function ExportProductionPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Vista</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">ID</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Nombre</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Bodega</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Ubicación</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Tipo Doc.</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Tipo Mov.</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Fecha</th>
@@ -242,46 +279,69 @@ export default function ExportProductionPage() {
                     ))}
                   </tr>
                 ))
-              ) : filtered.map((item) => (
-                <tr key={item.id} onClick={() => router.push(`/dashboard/export-production/${item.id}`)} className="hover:bg-slate-50 transition-colors cursor-pointer">
-                  <td className="px-5 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 font-mono">{item.identificador}</span>
-                  </td>
-                  <td className="px-5 py-4 font-medium text-slate-800">{item.nombre}</td>
-                  <td className="px-5 py-4 text-slate-600">{item.bodega || "—"}</td>
-                  <td className="px-5 py-4 text-slate-600">{item.ubicacion || "—"}</td>
-                  <td className="px-5 py-4">
-                    {item.tipoDocumento
-                      ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{item.tipoDocumento}</span>
-                      : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="px-5 py-4">
-                    {item.tipoMovimiento
-                      ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">{item.tipoMovimiento}</span>
-                      : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="px-5 py-4 text-slate-600">{fmt(item.fecha)}</td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => handleEdit(item)} className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-500 transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        disabled={deletingId === item.id}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors disabled:opacity-40"
-                      >
-                        {deletingId === item.id
-                          ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                          : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        }
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              ) : filtered.map((item) => {
+                const itemModulo = (item.modulo ?? modulo) as ModuloKey;
+                const itemLabel = MODULO_LABELS[itemModulo] ?? item.modulo ?? "Sin asignar";
+                const itemColor = MODULO_COLORS[itemModulo] ?? "bg-slate-100 text-slate-600 border-slate-200";
+
+                return (
+                  <tr
+                    key={item.id}
+                    onClick={() => hasDetail && router.push(`${basePath}/${item.id}`)}
+                    className={`transition-colors ${hasDetail ? "hover:bg-slate-50 cursor-pointer" : ""}`}
+                  >
+                    {/* Vista */}
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${itemColor}`}>
+                        {itemLabel}
+                      </span>
+                    </td>
+                    {/* ID */}
+                    <td className="px-5 py-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 font-mono">
+                        {item.identificador}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 font-medium text-slate-800">{item.nombre}</td>
+                    <td className="px-5 py-4 text-slate-600">{item.bodega || "—"}</td>
+                    <td className="px-5 py-4">
+                      {item.tipoDocumento
+                        ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{item.tipoDocumento}</span>
+                        : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-5 py-4">
+                      {item.tipoMovimiento
+                        ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">{item.tipoMovimiento}</span>
+                        : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-5 py-4 text-slate-600">{fmt(item.fecha)}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-500 transition-colors"
+                          title="Editar"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          disabled={deletingId === item.id}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors disabled:opacity-40"
+                          title="Eliminar"
+                        >
+                          {deletingId === item.id
+                            ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                            : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          }
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -290,23 +350,34 @@ export default function ExportProductionPage() {
               <svg className="w-10 h-10 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-sm">No se encontraron filtros</p>
+              <p className="text-sm">No se encontraron filtros para {moduloLabel}</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Filter form */}
+      {/* Form */}
       {showForm && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div className="mb-6">
-            <h2 className="text-base font-semibold text-slate-800">
-              {editingId ? `Editando: ${form.nombre}` : "Nuevo conjunto de filtros"}
-            </h2>
-            <p className="text-sm text-slate-400 mt-1">Completa los campos para definir el conjunto de filtros.</p>
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">
+                {editingId ? `Editando: ${form.nombre}` : "Nuevo conjunto de filtros"}
+              </h2>
+              <p className="text-sm text-slate-400 mt-1">
+                Se guardará como{" "}
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${moduloColor}`}>
+                  {moduloLabel}
+                </span>
+              </p>
+            </div>
+            <button onClick={handleCancel} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
 
-          {/* Sección principal */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
             <Field label="Identificador" name="identificador" value={form.identificador} onChange={handleChange} maxLength={5} placeholder="Ej: PRD01" mono />
             <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -323,10 +394,8 @@ export default function ExportProductionPage() {
             </div>
           </div>
 
-          {/* Separador */}
           <div className="my-6 border-t border-slate-100" />
 
-          {/* Orden de producción */}
           <div className="mb-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
@@ -340,7 +409,6 @@ export default function ExportProductionPage() {
             <Field label="Bodega Item Padre" name="bodegaItemPadre" value={form.bodegaItemPadre} onChange={handleChange} maxLength={5} placeholder="Ej: BO01" />
           </div>
 
-          {/* Actions */}
           <div className="flex items-center justify-end gap-3 mt-8 pt-6 border-t border-slate-100">
             <button type="button" onClick={handleCancel} className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">
               Cancelar

@@ -5,21 +5,26 @@ import Topbar from "@/components/layout/Topbar";
 import { usePathname } from "next/navigation";
 
 const pageTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/dashboard/employees": "Empleados",
-  "/dashboard/users": "Usuarios",
-  "/dashboard/reports": "Reportes",
-  "/dashboard/export-entrada":    "Exportar Entrada Desprese",
-  "/dashboard/export-production": "Exportar Salida Desprese",
-  "/dashboard/settings": "Configuración",
+  "/dashboard":                                          "Dashboard",
+  "/dashboard/employees":                                "Empleados",
+  "/dashboard/users":                                    "Usuarios",
+  "/dashboard/reports":                                  "Reportes",
+  "/dashboard/settings":                                 "Configuración",
+  "/dashboard/export-produccion/entrada-desprese":       "Entrada Desprese",
+  "/dashboard/export-produccion/salida-desprese":        "Salida Desprese",
+  "/dashboard/export-produccion/entrada-beneficio":      "Entrada Beneficio",
+  "/dashboard/export-produccion/salida-beneficio":       "Salida Beneficio",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const title = pageTitles[pathname]
-    ?? (pathname.startsWith("/dashboard/export-production/") ? "Exportar Salida Desprese"
-      : pathname.startsWith("/dashboard/export-entrada/")   ? "Exportar Entrada Desprese"
-      : "Dashboard");
+  const title =
+    pageTitles[pathname] ??
+    (pathname.startsWith("/dashboard/export-produccion/salida-desprese/")  ? "Salida Desprese"   :
+     pathname.startsWith("/dashboard/export-produccion/entrada-desprese/")  ? "Entrada Desprese"  :
+     pathname.startsWith("/dashboard/export-produccion/salida-beneficio/") ? "Salida Beneficio"  :
+     pathname.startsWith("/dashboard/export-produccion/entrada-beneficio/") ? "Entrada Beneficio" :
+     "Dashboard");
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">

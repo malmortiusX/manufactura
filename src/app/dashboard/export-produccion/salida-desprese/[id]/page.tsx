@@ -1,5 +1,5 @@
 "use client";
-// src/app/dashboard/export-production/[id]/page.tsx
+// src/app/dashboard/export-produccion/salida-desprese/[id]/page.tsx
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 
@@ -49,8 +49,8 @@ interface DocResult {
 interface TransmitResult {
   logId:     number;
   numeroOpg: number;
-  xml2:      string;   // construido server-side tras crear la orden
-  xml3:      string;   // construido server-side tras crear el consumo
+  xml2:      string;
+  xml3:      string;
   orden:     DocResult;
   consumo:   DocResult;
   entrega:   DocResult;
@@ -102,7 +102,6 @@ function sumarDias(fechaYMD: string, dias: number): string {
 
 // ── Generador XML Lotes — Tipo 403 ────────────────────────────────────────
 function buildXMLLotes(rows: ProductRow[], fecha: string): string {
-  // Deduplicar por (codigo, lote), solo filas con lote
   const productos = Array.from(
     new Map(
       rows
@@ -120,29 +119,29 @@ function buildXMLLotes(rows: ProductRow[], fecha: string): string {
   const opening   = "000000100000001001";
 
   const lines = productos.map((p, i) =>
-    pN(i + 2, 7) +              // F_NUMERO_REG
-    pN(403,   4) +              // F_TIPO_REG    = 403
-    pN(0,     2) +              // F_SUBTIPO_REG = 00
-    pN(2,     2) +              // F_VERSION_REG = 02
-    pN(1,     3) +              // F_CIA         = 1
-    pN(0,     1) +              // F_ACTUALIZA_REG = 0
-    pA(p.lote,   15) +          // f403_id (lote)
-    pN(0,      7) +             // f403_id_item (vacío)
-    pA(p.codigo, 50) +          // f403_referencia_item
-    pA("",       20) +          // f403_codigo_barras
-    pA("",       20) +          // f403_id_ext1_detalle
-    pA("",       20) +          // f403_id_ext2_detalle
-    pA("",        3) +          // f403_id_descripcion_tecnica
-    pN(1,      1) +             // f403_ind_estado = 1
-    pA(fecha,    8) +           // f403_fecha_creacion
-    pA(fechaVcto, 8) +          // f403_fecha_vcto (+30 días)
-    pA("",       15) +          // f403_lote_prov
-    pA("",       15) +          // f403_id_tercero_prov
-    pA("",        3) +          // f403_id_sucursal_prov
-    pA("",       40) +          // f403_fabricante
-    pA("",       15) +          // f403_num_lote_fabricante
-    pA("",        8) +          // f403_fecha_manufactura
-    pA("Creado por plano", 255) // f403_notas
+    pN(i + 2, 7) +
+    pN(403,   4) +
+    pN(0,     2) +
+    pN(2,     2) +
+    pN(1,     3) +
+    pN(0,     1) +
+    pA(p.lote,   15) +
+    pN(0,      7) +
+    pA(p.codigo, 50) +
+    pA("",       20) +
+    pA("",       20) +
+    pA("",       20) +
+    pA("",        3) +
+    pN(1,      1) +
+    pA(fecha,    8) +
+    pA(fechaVcto, 8) +
+    pA("",       15) +
+    pA("",       15) +
+    pA("",        3) +
+    pA("",       40) +
+    pA("",       15) +
+    pA("",        8) +
+    pA("Creado por plano", 255)
   );
 
   const closingNum = productos.length + 2;
@@ -346,7 +345,6 @@ function DocResultPanel({
             Ver respuesta del ERP
           </summary>
           <pre className="mt-2 text-[10px] text-slate-500 font-mono whitespace-pre-wrap break-all bg-white border border-red-100 rounded-lg p-2 max-h-48 overflow-y-auto">
-            {/* respuestaRaw is not in DocResult client-side; fallback text */}
             Sin respuesta
           </pre>
         </details>
@@ -385,7 +383,6 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
       todoOmitidos  ? "border-slate-200 bg-slate-50"  :
                       "border-emerald-200 bg-emerald-50"
     }`}>
-      {/* Cabecera */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
           <svg className={`w-4 h-4 ${hayErrores ? "text-amber-500" : "text-emerald-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -411,7 +408,6 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
         </div>
       </div>
 
-      {/* Todo omitido */}
       {todoOmitidos && (
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
           <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -421,7 +417,6 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
         </p>
       )}
 
-      {/* Éxito con nuevos */}
       {result.exitoso && result.nuevos.length > 0 && (
         <p className="text-xs text-emerald-700 flex items-center gap-1.5">
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,7 +426,6 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
         </p>
       )}
 
-      {/* Errores ERP */}
       {hayErrores && result.errores.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-amber-700">Errores al crear lotes:</p>
@@ -453,13 +447,11 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
         </div>
       )}
 
-      {/* Errores sin detalle */}
       {hayErrores && result.errores.length === 0 && (
         <p className="text-xs text-amber-700">
           El ERP rechazó la creación de lotes. Verifique el XML enviado.
         </p>
       )}
-
     </div>
   );
 }
@@ -468,7 +460,7 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
 const fmtNum = (n: number) =>
   new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-export default function ExportDetailPage() {
+export default function SalidaDesPreseDetailPage() {
   const { id }   = useParams<{ id: string }>();
   const router   = useRouter();
 
@@ -484,7 +476,6 @@ export default function ExportDetailPage() {
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
 
-  // Estado del subproceso de lotes
   const [lotesResult, setLotesResult] = useState<LoteCreacionResult | null>(null);
 
   const marcarLote = useCallback(async () => {
@@ -516,8 +507,6 @@ export default function ExportDetailPage() {
 
   const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
   const xml1     = filtro ? buildXML1(filtro, rows, consecOpg) : "";
-  // XML2 y XML3 se construyen server-side después de crear la orden;
-  // se muestran desde el resultado de transmisión cuando están disponibles.
   const xml2Preview = transmitResult?.xml2 || "// Se genera en el servidor al consultar los componentes de la OP creada";
   const xml3Preview = transmitResult?.xml3 || "// Se genera en el servidor al completar el consumo";
 
@@ -533,7 +522,6 @@ export default function ExportDetailPage() {
 
     try {
       // ── Paso 1: Crear/verificar lotes en ERP ──────────────────────────
-      // Deduplicar por (codigo, lote), excluir filas sin lote
       const uniqueLotes: ProductoLote[] = Array.from(
         new Map(
           rows
@@ -557,7 +545,6 @@ export default function ExportDetailPage() {
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
         setLotesResult(lotesData);
 
-        // Si el SOAP de lotes falló, detener el proceso
         if (!lotesData.exitoso && lotesData.nuevos.length > 0) {
           setTransmitting(false);
           setRetrying(false);
@@ -574,10 +561,9 @@ export default function ExportDetailPage() {
       const nuevoConsec: number = seqData.consecOpg;
       setConsecOpg(nuevoConsec);
 
-      // ── Paso 3: Construir y transmitir — XML2 se construye server-side ───
+      // ── Paso 3: Transmitir ────────────────────────────────────────────
       const xml1Final = buildXML1(filtro, rows, nuevoConsec);
 
-      // Mapa código → lote para que el servidor pueda llenar f470_id_lote en XML2
       const lotesPorProducto: Record<string, string> = {};
       rows.forEach((r) => {
         const codigo = r.CODIGO_PRODUCTO.trim();
@@ -585,7 +571,6 @@ export default function ExportDetailPage() {
         if (codigo) lotesPorProducto[codigo] = lote;
       });
 
-      // Filas necesarias para que el servidor construya XML3 (Entrega)
       const rowsParaXml3 = rows.map((r) => ({
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
         LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
@@ -621,7 +606,7 @@ export default function ExportDetailPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header ──────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.back()}
@@ -634,7 +619,7 @@ export default function ExportDetailPage() {
 
         <div>
           <h1 className="text-lg font-semibold text-slate-800">
-            {filtro ? `Exportar ${filtro.nombre}` : "Exportar Producción"}
+            {filtro ? `Exportar ${filtro.nombre}` : "Salida Desprese"}
           </h1>
           {filtro && (
             <p className="text-xs text-slate-400 mt-0.5">
@@ -701,7 +686,6 @@ export default function ExportDetailPage() {
         </div>
       </div>
 
-      {/* Errores de carga / transmisión ─────────────────────────────────── */}
       {error && (
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -720,7 +704,6 @@ export default function ExportDetailPage() {
         </div>
       )}
 
-      {/* Panel de lotes ──────────────────────────────────────────────────── */}
       {lotesResult && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
           <p className="text-sm font-semibold text-slate-700">Paso 1 — Registro de lotes</p>
@@ -728,7 +711,6 @@ export default function ExportDetailPage() {
         </div>
       )}
 
-      {/* Panel de transmisión ────────────────────────────────────────────── */}
       {transmitResult && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div className="flex items-center justify-between">
@@ -782,7 +764,6 @@ export default function ExportDetailPage() {
 
       {!loading && !error && (
         <>
-          {/* Totales */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Registros</p>
@@ -798,7 +779,6 @@ export default function ExportDetailPage() {
             </div>
           </div>
 
-          {/* XMLs */}
           <XmlBlock title="XML Lotes — Tipo 403"           content={xmlLotes} />
           <XmlBlock title="XML 1 — Orden de Producción"   content={xml1} />
           <XmlBlock title="XML 2 — Consumo de Producción" content={xml2Preview} />
@@ -806,7 +786,6 @@ export default function ExportDetailPage() {
         </>
       )}
 
-      {/* Tabla de productos ──────────────────────────────────────────────── */}
       {(rows.length > 0 || loading) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">

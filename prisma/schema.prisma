@@ -82,6 +82,7 @@ model ExportProduccion {
   terceroPlanificador     String?  @db.Char(15)
   instalacion             String?  @db.Char(3)
   bodegaItemPadre         String?  @db.Char(5)
+  modulo                  String?  @db.VarChar(30)  // "entrada-desprese" | "salida-desprese" | "entrada-beneficio" | "salida-beneficio"
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt

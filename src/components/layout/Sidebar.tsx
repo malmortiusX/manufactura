@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 const navItems = [
   {
@@ -44,24 +45,6 @@ const navItems = [
     ),
   },
   {
-    label: "Exportar Entrada Desprese",
-    href: "/dashboard/export-entrada",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0l4 4m-4-4v12" />
-      </svg>
-    ),
-  },
-  {
-    label: "Exportar Salida Desprese",
-    href: "/dashboard/export-production",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
-    ),
-  },
-  {
     label: "Configuración",
     href: "/dashboard/settings",
     icon: (
@@ -73,9 +56,42 @@ const navItems = [
   },
 ];
 
+const exportGroups = [
+  {
+    key: "export-produccion",
+    label: "Exportar Producción",
+    basePath: "/dashboard/export-produccion",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    children: [
+      { label: "Entrada Beneficio", href: "/dashboard/export-produccion/entrada-beneficio" },
+      { label: "Salida Beneficio",  href: "/dashboard/export-produccion/salida-beneficio" },
+      { label: "Entrada Desprese",  href: "/dashboard/export-produccion/entrada-desprese" },
+      { label: "Salida Desprese",   href: "/dashboard/export-produccion/salida-desprese" },
+    ],
+  },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Determinar si algún hijo del grupo está activo para abrir el grupo por defecto
+  const defaultOpen = exportGroups.reduce<Record<string, boolean>>((acc, g) => {
+    acc[g.key] = g.children.some(
+      (c) => pathname === c.href || pathname.startsWith(c.href + "/")
+    );
+    return acc;
+  }, {});
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(defaultOpen);
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   async function handleSignOut() {
     await signOut();
@@ -104,6 +120,8 @@ export default function Sidebar() {
         <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider px-3 mb-3">
           Menú principal
         </p>
+
+        {/* Flat nav items */}
         {navItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
           return (
@@ -125,6 +143,76 @@ export default function Sidebar() {
                 <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400" />
               )}
             </Link>
+          );
+        })}
+
+        {/* Collapsible group items */}
+        {exportGroups.map((group) => {
+          const isOpen        = !!openGroups[group.key];
+          const groupIsActive = group.children.some(
+            (c) => pathname === c.href || pathname.startsWith(c.href + "/")
+          );
+
+          return (
+            <div key={group.key}>
+              {/* Group header button */}
+              <button
+                onClick={() => toggleGroup(group.key)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+                  groupIsActive
+                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                    : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                )}
+              >
+                <span className={cn(groupIsActive ? "text-blue-400" : "text-slate-500")}>
+                  {group.icon}
+                </span>
+                <span className="flex-1 text-left">{group.label}</span>
+                <svg
+                  className={cn(
+                    "w-3.5 h-3.5 transition-transform duration-200",
+                    groupIsActive ? "text-blue-400" : "text-slate-600",
+                    isOpen ? "rotate-180" : "rotate-0"
+                  )}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Children */}
+              {isOpen && (
+                <div className="mt-0.5 ml-3 pl-3 border-l border-white/10 space-y-0.5">
+                  {group.children.map((child) => {
+                    const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150",
+                          childActive
+                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            : "text-slate-400 hover:bg-white/5 hover:text-slate-300"
+                        )}
+                      >
+                        <span className={cn(
+                          "w-1 h-1 rounded-full flex-shrink-0",
+                          childActive ? "bg-blue-400" : "bg-slate-600"
+                        )} />
+                        {child.label}
+                        {childActive && (
+                          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400" />
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
