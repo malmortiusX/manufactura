@@ -385,7 +385,7 @@ export default function SalidaBeneficioDetailPage() {
           xml1:             xml1Final,
           lotesPorProducto,
           rows:             rowsParaXml3,
-          productoProceso:  "PP00002",   // ← diferencia respecto a Salida Desprese
+          productoProceso:  ["PP00002", "PP00003"],   // ← diferencia respecto a Salida Desprese
         }),
       });
       const text = await res.text();
