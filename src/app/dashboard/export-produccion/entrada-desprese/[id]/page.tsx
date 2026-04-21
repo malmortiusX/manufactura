@@ -219,6 +219,72 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
   return [opening, header, pi00001Line, closing].join("\n");
 }
 
+// ── Generador XML2 — Consumo de Producción (Entrada Desprese) ────────────
+// Usa los productos consultados directamente (no consulta componentes en ERP).
+// Cada producto crudo es un componente consumido con padre = PI00001.
+// Estructura: apertura + encabezado 450 (344 chars) + líneas 470 (2673 chars) + cierre
+function buildXML2(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
+  const fecha   = fechaYMD(filtro.fecha);
+  const opening = "000000100000001001";
+
+  // ── Encabezado tipo 450, subtipo 3, versión 1 (344 chars) ────────────────
+  // Longitudes: 7+4+2+2+3+1+3+3+8+8+1+1+3+15+255+2+15+3+8 = 344
+  const encabezado =
+    pN(2,   7) + pN(450, 4) + pN(3, 2) + pN(1, 2) + pN(1, 3) + pN(1, 1) +
+    pA(filtro.centroOperacion, 3) +   // f350_id_co
+    pA("SCG",                  3) +   // f350_id_tipo_docto
+    pN(1,   8) +                      // f350_consec_docto = 1 (ERP asigna)
+    pA(fecha,                  8) +   // f350_id_fecha
+    pN(1,   1) +                      // f350_ind_estado = 1
+    pN(0,   1) +                      // f350_ind_impresion = 0
+    pN(710, 3) +                      // f350_id_clase_docto = 710
+    pA("",  15) +                     // f350_docto_alterno
+    pA(filtro.nombre,        255) +   // f350_notas
+    pA("01",  2) +                    // f350_id_motivo = 01
+    pA("",   15) +                    // f350_id_proyecto
+    pA("OPG", 3) +                    // f850_tipo_docto = OPG
+    pN(consecOpg, 8);                 // f850_consec_docto (nro de la OP creada)
+
+  // ── Líneas tipo 470, subtipo 00, versión 4 (2673 chars c/u) ──────────────
+  // Longitudes: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+10+7+50+20+20+20+5+10+15+3+2+3+20+15+15+4+20+20+255+2000 = 2673
+  const productLines = rows.map((row, i) =>
+    pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
+    pA(filtro.centroOperacion,     3) +   // f470_id_co
+    pA("SCG",                      3) +   // f470_id_tipo_docto
+    pN(1,      8) +                       // f470_consec_docto = 1
+    pN(i + 1, 10) +                       // f470_nro_registro (1, 2, 3…)
+    pN(0,      7) +                       // f470_id_item_padre
+    pA("PI00001",                 50) +   // f470_referencia_item_padre = PI00001
+    pA("",    20) +                       // f470_codigo_barras_padre
+    pA("",    20) +                       // f470_id_ext1_detalle_padre
+    pA("",    20) +                       // f470_id_ext2_detalle_padre
+    pN(0,     10) +                       // f470_numero_operacion
+    pN(0,      7) +                       // f470_id_item_comp
+    pA(row.CODIGO_PRODUCTO,       50) +   // f470_referencia_item_comp
+    pA("",    20) +                       // f470_codigo_barras_comp
+    pA("",    20) +                       // f470_id_ext1_detalle_comp
+    pA("",    20) +                       // f470_id_ext2_detalle_comp
+    pA((row.BODEGA ?? "").trim(),  5) +   // f470_id_bodega
+    pA("",    10) +                       // f470_id_ubicacion_aux
+    pA(row.LOTE_PRODUCTO,         15) +   // f470_id_lote
+    pN(701,    3) +                       // f470_id_concepto = 701
+    pA("01",   2) +                       // f470_id_motivo = 01
+    pA(filtro.centroOperacion,     3) +   // f470_id_co_movto
+    pA("31",  20) +                       // f470_id_un_movto
+    pA("70010101",                15) +   // f470_id_ccosto_movto
+    pA("",    15) +                       // f470_id_proyecto
+    pA(row.UNIDAD_PRODUCTO,        4) +   // f470_id_unidad_medida
+    pQ(Number(row.KIL), 15, 4) +          // f470_cant_base (20 chars)
+    pQ(Number(row.UND), 15, 4) +          // f470_cant_2 (20 chars)
+    pA("",   255) +                       // f470_notas
+    pA("",  2000)                         // f470_desc_varible
+  );
+
+  const closingNum = rows.length + 3;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+  return [opening, encabezado, ...productLines, closing].join("\n");
+}
+
 // ── Componente: bloque XML con copiar ─────────────────────────────────────
 function XmlBlock({ title, content }: { title: string; content: string }) {
   const [copied, setCopied] = useState(false);
@@ -517,9 +583,9 @@ export default function EntradaDesPreseDetailPage() {
   const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
-  const xmlLotes   = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
-  const xml1       = filtro ? buildXML1(filtro, rows, consecOpg) : "";
-  const xml2Preview = transmitResult?.xml2 || "// Se genera en el servidor al consultar los componentes de la OP creada";
+  const xmlLotes    = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
+  const xml1        = filtro ? buildXML1(filtro, rows, consecOpg) : "";
+  const xml2        = filtro && rows.length > 0 ? buildXML2(filtro, rows, consecOpg) : "";
   const xml3Preview = transmitResult?.xml3 || "// Se genera en el servidor al completar el consumo";
 
   const transmitir = useCallback(async (esReintento = false) => {
@@ -591,7 +657,10 @@ export default function EntradaDesPreseDetailPage() {
         if (codigo) lotesPorProducto[codigo] = lote;
       });
 
-      // XML3 entrega PI00001 con la sumatoria de KIL
+      // XML2: consumo de los productos crudos — construido localmente, sin consulta SOAP
+      const xml2Final = buildXML2(filtro, rows, nuevoConsec);
+
+      // XML3: entrega de PI00001 con la sumatoria de KIL
       const rowsParaXml3 = [{
         CODIGO_PRODUCTO: "PI00001",
         LOTE_PRODUCTO:   rows[0]?.LOTE_PRODUCTO ?? "",
@@ -601,19 +670,16 @@ export default function EntradaDesPreseDetailPage() {
         UND:             0,
       }];
 
-      // productoProceso: todos los productos crudos (son los que llevan lote en el consumo XML2)
-      const productoProceso = rows.map((r) => r.CODIGO_PRODUCTO.trim()).filter(Boolean);
-
       const res  = await fetch(`/api/export-produccion/${id}/transmit`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           bache,
-          consecOpg:     nuevoConsec,
-          xml1:          xml1Final,
+          consecOpg:        nuevoConsec,
+          xml1:             xml1Final,
           lotesPorProducto,
-          rows:          rowsParaXml3,
-          productoProceso,
+          rows:             rowsParaXml3,
+          xml2Prefabricado: xml2Final,   // ← XML2 ya construido, omite consulta SOAP
         }),
       });
       const text = await res.text();
@@ -807,10 +873,10 @@ export default function EntradaDesPreseDetailPage() {
             </div>
           </div>
 
-          <XmlBlock title="XML Lotes — Tipo 403"                         content={xmlLotes} />
-          <XmlBlock title="XML 1 — Orden de Producción (PI00001)"        content={xml1} />
-          <XmlBlock title="XML 2 — Consumo — Productos crudos"          content={xml2Preview} />
-          <XmlBlock title="XML 3 — Entrega — PI00001"                   content={xml3Preview} />
+          <XmlBlock title="XML Lotes — Tipo 403"                  content={xmlLotes} />
+          <XmlBlock title="XML 1 — Orden de Producción (PI00001)" content={xml1} />
+          <XmlBlock title="XML 2 — Consumo — Productos crudos"    content={xml2} />
+          <XmlBlock title="XML 3 — Entrega — PI00001"             content={xml3Preview} />
         </>
       )}
 

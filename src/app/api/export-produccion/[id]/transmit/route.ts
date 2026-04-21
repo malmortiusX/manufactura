@@ -253,14 +253,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
 
     const body = await req.json() as {
-      bache:            number;
-      consecOpg:        number;
-      xml1:             string;
-      lotesPorProducto: Record<string, string>; // { codigoProducto: lote }
-      rows:             RowXml3[];              // filas de la orden (para XML3)
-      productoProceso?: string[];               // códigos de productos en proceso que llevan lote (default ["PI00001"])
+      bache:             number;
+      consecOpg:         number;
+      xml1:              string;
+      lotesPorProducto:  Record<string, string>; // { codigoProducto: lote }
+      rows:              RowXml3[];              // filas de la orden (para XML3)
+      productoProceso?:  string[];               // códigos que llevan lote en XML2 vía SOAP (default ["PI00001"])
+      xml2Prefabricado?: string;                 // XML2 ya construido (omite consulta SOAP — usado por Entrada Desprese)
     };
-    const { bache, consecOpg, xml1, lotesPorProducto = {}, rows = [], productoProceso = ["PI00001"] } = body;
+    const { bache, consecOpg, xml1, lotesPorProducto = {}, rows = [], productoProceso = ["PI00001"], xml2Prefabricado } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo (consecOpg)" }, { status: 400 });
@@ -300,24 +301,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     try { ordenResult = await callSoap(xml1); }
     catch (e) { ordenResult = { exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) }; }
 
-    // 3. Si la orden fue exitosa, consultar componentes y construir + enviar XML2
+    // 3. Si la orden fue exitosa, construir/usar XML2 y enviarlo
     if (ordenResult.exitoso) {
       try {
-        componentes = await queryComponentesOP(
-          filtro.centroOperacion?.trim() ?? "",
-          "OPG",
-          consecOpg,
-        );
+        if (xml2Prefabricado) {
+          // Entrada Desprese: XML2 llega ya construido desde el cliente (sin consulta SOAP)
+          xml2 = xml2Prefabricado;
+        } else {
+          // Salida Desprese / Salida Beneficio: consultar componentes en ERP y construir XML2
+          componentes = await queryComponentesOP(
+            filtro.centroOperacion?.trim() ?? "",
+            "OPG",
+            consecOpg,
+          );
 
-        xml2 = buildXML2(
-          filtro.centroOperacion?.trim() ?? "",
-          filtro.nombre,
-          fecha,
-          consecOpg,
-          componentes,
-          lotesPorProducto,
-          productoProceso,
-        );
+          xml2 = buildXML2(
+            filtro.centroOperacion?.trim() ?? "",
+            filtro.nombre,
+            fecha,
+            consecOpg,
+            componentes,
+            lotesPorProducto,
+            productoProceso,
+          );
+        }
 
         // Persistir XML2 en el log
         await prisma.opgLog.update({ where: { id: log.id }, data: { xml2 } });
