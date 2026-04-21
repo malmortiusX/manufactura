@@ -208,7 +208,7 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pA(fecha,                   8) +   // f851_fecha_inicio
     pA(fecha,                   8) +   // f851_fecha_terminacion
     pA("",                      4) +   // f851_id_metodo_lista ← VACÍO para Entrada Desprese
-    bodega +                            // f851_id_bodega_componentes (5)
+    pA("",                      5) +   // f851_id_bodega_componentes ← VACÍO para Entrada Desprese
     pA("",                      4) +   // f851_id_metodo_ruta
     pA(lote,                   15) +   // f851_id_lote (LOTE_PRODUCTO de las filas)
     pA("",                   2000) +   // f851_notas
