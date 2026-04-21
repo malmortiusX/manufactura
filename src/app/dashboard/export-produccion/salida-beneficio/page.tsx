@@ -7,7 +7,7 @@ export default function SalidaBeneficioPage() {
     <FilterList
       modulo="salida-beneficio"
       basePath="/dashboard/export-produccion/salida-beneficio"
-      hasDetail={false}
+      hasDetail
     />
   );
 }

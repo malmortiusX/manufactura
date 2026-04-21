@@ -47,6 +47,7 @@ function buildXML2(
   consecOpg:        number,
   componentes:      ComponenteOP[],
   lotesPorProducto: Record<string, string>,   // { codigoProducto: lote }
+  productoProceso = "PI00001",               // código del producto en proceso que lleva lote
 ): string {
   const opening = "000000100000001001";
 
@@ -76,8 +77,8 @@ function buildXML2(
   // ── Líneas de componentes tipo 470 (2673 chars c/u) ──────────────────────
   // Longitudes: 7+4+2+2+3+3+3+8+10+7+50+20+20+20+10+7+50+20+20+20+5+10+15+3+2+3+20+15+15+4+20+20+255+2000 = 2673
   const productLines = componentes.map((comp, i) => {
-    // Solo PI00001 lleva lote; los demás componentes van en blanco.
-    const esPi = comp.hijoReferencia.trim() === "PI00001";
+    // Solo el productoProceso lleva lote; los demás componentes van en blanco.
+    const esPi = comp.hijoReferencia.trim() === productoProceso;
     const lotePadre = esPi ? (lotesPorProducto[comp.padreReferencia.trim()] ?? "") : "";
 
     return (
@@ -257,8 +258,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       xml1:             string;
       lotesPorProducto: Record<string, string>; // { codigoProducto: lote }
       rows:             RowXml3[];              // filas de la orden (para XML3)
+      productoProceso?: string;                 // código del producto en proceso (default PI00001)
     };
-    const { bache, consecOpg, xml1, lotesPorProducto = {}, rows = [] } = body;
+    const { bache, consecOpg, xml1, lotesPorProducto = {}, rows = [], productoProceso = "PI00001" } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg) return NextResponse.json({ error: "Falta el consecutivo (consecOpg)" }, { status: 400 });
@@ -314,6 +316,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           consecOpg,
           componentes,
           lotesPorProducto,
+          productoProceso,
         );
 
         // Persistir XML2 en el log

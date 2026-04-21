@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     pageTitles[pathname] ??
     (pathname.startsWith("/dashboard/export-produccion/salida-desprese/")  ? "Salida Desprese"   :
      pathname.startsWith("/dashboard/export-produccion/entrada-desprese/")  ? "Entrada Desprese"  :
-     pathname.startsWith("/dashboard/export-produccion/salida-beneficio/") ? "Salida Beneficio"  :
+     pathname.startsWith("/dashboard/export-produccion/salida-beneficio/")  ? "Salida Beneficio"  :
      pathname.startsWith("/dashboard/export-produccion/entrada-beneficio/") ? "Entrada Beneficio" :
      "Dashboard");
 
