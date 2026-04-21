@@ -522,15 +522,27 @@ export default function SalidaDesPreseDetailPage() {
 
     try {
       // ── Paso 1: Crear/verificar lotes en ERP ──────────────────────────
+      // Incluye los productos crudos Y PI00001 por cada lote único de las filas
+      // (PI00001 hereda el lote del producto crudo en XML2)
+      const lotesUnicos = Array.from(
+        new Set(rows.map((r) => r.LOTE_PRODUCTO?.trim()).filter(Boolean))
+      ) as string[];
+
       const uniqueLotes: ProductoLote[] = Array.from(
-        new Map(
-          rows
+        new Map([
+          // Productos crudos consultados
+          ...rows
             .filter((r) => r.LOTE_PRODUCTO?.trim())
-            .map((r) => [
+            .map((r): [string, ProductoLote] => [
               `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
               { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
-            ])
-        ).values()
+            ]),
+          // PI00001 — producto en proceso, una entrada por cada lote único
+          ...lotesUnicos.map((lote): [string, ProductoLote] => [
+            `PI00001|${lote}`,
+            { codigo: "PI00001", lote },
+          ]),
+        ]).values()
       );
 
       if (uniqueLotes.length > 0) {
