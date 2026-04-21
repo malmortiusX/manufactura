@@ -264,7 +264,7 @@ function buildXML2(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pA("",    20) +                       // f470_codigo_barras_comp
     pA("",    20) +                       // f470_id_ext1_detalle_comp
     pA("",    20) +                       // f470_id_ext2_detalle_comp
-    pA((row.BODEGA ?? "").trim(),  5) +   // f470_id_bodega
+    pA((filtro.bodegaItemPadre ?? "").trim(), 5) +   // f470_id_bodega (bodega del filtro)
     pA("",    10) +                       // f470_id_ubicacion_aux
     pA(row.LOTE_PRODUCTO,         15) +   // f470_id_lote
     pN(701,    3) +                       // f470_id_concepto = 701
