@@ -95,7 +95,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       const rows = await tx.$queryRawUnsafe(selectSql);
 
       return { bache, rows };
-    });
+    }, { timeout: 30_000 });   // 30 s — el UPDATE + SELECT en tablas grandes puede superar el límite de 5 s
 
     return NextResponse.json({ filtro, bache, rows });
 
