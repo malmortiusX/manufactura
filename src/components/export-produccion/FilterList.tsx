@@ -1,7 +1,7 @@
 "use client";
 // src/components/export-produccion/FilterList.tsx
 // Lista CRUD de filtros compartida entre los 4 módulos de Exportar Producción.
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 export interface FilterSet {
