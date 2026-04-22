@@ -287,7 +287,7 @@ function buildXML3b(
     const bodega   = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
     const esPP2    = row.CODIGO_PRODUCTO.trim() === "PP00002";
     const itemOtro = esPP2 ? "" : row.CODIGO_PRODUCTO;   // f470_referencia_item_otros
-    const nroRegPadre = esPP2 ? 0 : 1;                   // f_nro_reg_item_padre
+    const nroRegPadre = esPP2 ? 0 : 2;                   // f_nro_reg_item_padre
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(2, 2) + pN(2, 2) + pN(1, 3) +
       pA(centroOperacion,   3) +
