@@ -21,8 +21,11 @@ import {
 
 export type { ErpError, DocResult } from "@/lib/erp-soap";
 
-// Producto en proceso intermedio que genera OPG2
+// Producto en proceso que genera OPG2
 const PP_CODIGOS = ["PP00002"];
+
+// Productos en proceso que llevan lote en el consumo (SPG) de OPG1
+const PP_CON_LOTE = ["PP00001", "PP00002", "PP00003"];
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
 const pN = (val: string | number | null | undefined, len: number) =>
@@ -479,7 +482,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Depende de: EPG OPG2 exitosa (si había PP) o de OPG1 directamente (si no había PP)
       if (puedeOpg1Phase && opg1Componentes.length > 0) {
         try {
-          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, lotesPorProducto, PP_CODIGOS);
+          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, lotesPorProducto, PP_CON_LOTE);
           await prisma.opgLog.update({ where: { id: log1.id }, data: { xml2 } });
           consumoOpg1Result = await callSoap(xml2);
         } catch (e) { consumoOpg1Result = mkErr(e); }
