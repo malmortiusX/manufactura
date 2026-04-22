@@ -24,13 +24,15 @@ export type ModuloKey =
   | "entrada-desprese"
   | "salida-desprese"
   | "entrada-beneficio"
-  | "salida-beneficio";
+  | "salida-beneficio"
+  | "beneficio";
 
 const MODULO_LABELS: Record<ModuloKey, string> = {
   "entrada-desprese":  "Entrada Desprese",
   "salida-desprese":   "Salida Desprese",
   "entrada-beneficio": "Entrada Beneficio",
   "salida-beneficio":  "Salida Beneficio",
+  "beneficio":         "Beneficio",
 };
 
 const MODULO_COLORS: Record<ModuloKey, string> = {
@@ -38,6 +40,7 @@ const MODULO_COLORS: Record<ModuloKey, string> = {
   "salida-desprese":   "bg-violet-50 text-violet-700 border-violet-200",
   "entrada-beneficio": "bg-teal-50 text-teal-700 border-teal-200",
   "salida-beneficio":  "bg-orange-50 text-orange-700 border-orange-200",
+  "beneficio":         "bg-rose-50 text-rose-700 border-rose-200",
 };
 
 interface Props {
