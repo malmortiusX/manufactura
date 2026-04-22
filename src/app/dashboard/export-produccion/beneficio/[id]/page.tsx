@@ -446,9 +446,6 @@ export default function BeneficioDetailPage() {
   const xmlLotes    = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
   const xml1        = filtro ? buildXML1(filtro, rows, consecOpg1) : "";
 
-  const PP_CODIGOS  = ["PP00001", "PP00002", "PP00003"];
-  const lotesUnicosPP = Array.from(new Set(rows.map((r) => r.LOTE_PRODUTO?.trim()).filter(Boolean))) as string[];
-
   const transmitir = useCallback(async () => {
     if (!bache || !filtro) return;
     setTransmitting(true);
@@ -458,24 +455,17 @@ export default function BeneficioDetailPage() {
 
     try {
       // ── Paso 1: Crear/verificar lotes ────────────────────────────────────
-      const lotesUnicos = Array.from(new Set(rows.map((r) => r.LOTE_PRODUCTO?.trim()).filter(Boolean))) as string[];
-
+      // Solo se pre-crean los lotes de los productos reales de las filas.
+      // Los lotes de PP00001/PP00002/PP00003 los gestiona el ERP al entregar OPG2 (EPG).
       const uniqueLotes: ProductoLote[] = Array.from(
-        new Map([
-          ...rows
+        new Map(
+          rows
             .filter((r) => r.LOTE_PRODUCTO?.trim())
             .map((r): [string, ProductoLote] => [
               `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
               { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
-            ]),
-          // PP products — un lote por cada lote único de las filas
-          ...PP_CODIGOS.flatMap((pp) =>
-            lotesUnicos.map((lote): [string, ProductoLote] => [
-              `${pp}|${lote}`,
-              { codigo: pp, lote },
             ])
-          ),
-        ]).values()
+        ).values()
       );
 
       if (uniqueLotes.length > 0) {
