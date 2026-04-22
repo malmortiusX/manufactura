@@ -250,6 +250,82 @@ function buildXML3(
   return [opening, encabezado, ...productLines, closing].join("\n");
 }
 
+// ── XML3b — Entrega OPG2 (EPG con reglas de PP) ───────────────────────────
+// Diferencias respecto a buildXML3 (OPG1):
+//   f470_referencia_item        → siempre "PP00002" para todas las líneas
+//   f470_referencia_item_otros  → código real del producto; vacío si es PP00002
+//   f_nro_reg_item_padre        → 1 para todos excepto PP00002 que lleva 0
+function buildXML3b(
+  centroOperacion: string,
+  nombre:          string,
+  fecha:           string,
+  consecOpg:       number,
+  rows:            RowXml3[],
+  bodegaItemPadre: string | null | undefined,
+): string {
+  const opening = "000000100000001001";
+
+  const encabezado =
+    pN(2,    7) + pN(450, 4) + pN(1, 2) + pN(1, 2) + pN(1, 3) + pN(1, 1) +
+    pA(centroOperacion,   3) +
+    pA("EPG",             3) +
+    pN(1,    8) +
+    pA(fecha,             8) +
+    pN(1,    1) + pN(0, 1) +
+    pA(nombre,          255) +
+    pN(720,  3) +
+    pA("",   15) + pA("",   10) + pA("",   15) + pA("",    3) +
+    pA("",   15) + pA("",   50) + pA("",   15) + pA("",   30) +
+    pN(0,    15) +
+    pQ(0,    15, 4) + pQ(0, 15, 4) + pQ(0, 15, 4) +
+    pA("",  255) +
+    pA("01",  2) +
+    pA("",   15) +
+    pA("70010101", 15);
+
+  const productLines = rows.map((row, i) => {
+    const bodega   = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
+    const esPP2    = row.CODIGO_PRODUCTO.trim() === "PP00002";
+    const itemOtro = esPP2 ? "" : row.CODIGO_PRODUCTO;   // f470_referencia_item_otros
+    const nroRegPadre = esPP2 ? 0 : 1;                   // f_nro_reg_item_padre
+    return (
+      pN(i + 3,  7) + pN(470, 4) + pN(2, 2) + pN(2, 2) + pN(1, 3) +
+      pA(centroOperacion,   3) +
+      pA("EPG",             3) +
+      pN(1,      8) +
+      pN(i + 1, 10) +
+      pA("OPG",             3) +
+      pN(consecOpg,         8) +
+      pN(0,      7) +
+      pA("PP00002",        50) +                          // f470_referencia_item
+      pA("",    20) + pA("",    20) + pA("",    20) +
+      pN(0,      7) +
+      pA(itemOtro,         50) +                          // f470_referencia_item_otros
+      pA("",    20) + pA("",    20) + pA("",    20) +
+      bodega +
+      pA("",    10) +
+      pA(row.LOTE_PRODUCTO,    15) +
+      pN(701,    3) +
+      pA("03",   2) + pA("",    2) +
+      pA(centroOperacion,   3) +
+      pA("31",  20) +
+      pA("70010401",       15) +
+      pA("",    15) +
+      pQ(Number(row.KIL), 15, 4) +
+      pQ(Number(row.UND), 15, 4) +
+      pQ(0,     15, 4) + pQ(0, 15, 4) +
+      pA("",   255) + pA("",  2000) +
+      pA("",    40) +
+      pA(row.UNIDAD_PRODUCTO,  4) +
+      pN(nroRegPadre,      10)                            // f_nro_reg_item_padre
+    );
+  });
+
+  const closingNum = rows.length + 3;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+  return [opening, encabezado, ...productLines, closing].join("\n");
+}
+
 // ── XML Lotes (tipo 403) ──────────────────────────────────────────────────
 function sumarDias(fechaYMD: string, dias: number): string {
   const y  = parseInt(fechaYMD.slice(0, 4), 10);
@@ -480,7 +556,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 BODEGA: filtro.bodegaItemPadre?.trim() ?? "",
                 UNIDAD_PRODUCTO: p.unidad, KIL: p.cantidad, UND: 0,
               }));
-              xml3b = buildXML3(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre);
+              xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre);
               await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
               entregaOpg2Result = await callSoap(xml3b);
             } catch (e) { entregaOpg2Result = mkErr(e); }
