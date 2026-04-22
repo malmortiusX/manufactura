@@ -363,7 +363,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let xml3  = "";
 
     let opg1Componentes: ComponenteOP[] = [];
-    let ppItems:         PpItem[]       = [];
+    let ppItems:         PpItem[]       = [];   // solo PP00002 → decide si crear OPG2
+    let ppEntregaItems:  PpItem[]       = [];   // PP00001+PP00002+PP00003 → van en EPG OPG2
     let log2Id = 0;
 
     const mkErr = (e: unknown): DocResult =>
@@ -378,20 +379,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // ── Paso 2: Consultar componentes de OPG1 + calcular ppItems ─────────
       try {
         opg1Componentes = await queryComponentesOP(co, "OPG", consecOpg1);
-        const ppSums: Record<string, { cantidad: number; unidad: string }> = {};
+
+        // Sumar cantidades para PP_CODIGOS (trigger OPG2) y PP_CON_LOTE (entrega OPG2)
+        const ppSums:         Record<string, { cantidad: number; unidad: string }> = {};
+        const ppEntregaSums:  Record<string, { cantidad: number; unidad: string }> = {};
+
         for (const comp of opg1Componentes) {
           const codigo = comp.hijoReferencia.trim();
           if (PP_CODIGOS.includes(codigo)) {
             if (!ppSums[codigo]) ppSums[codigo] = { cantidad: 0, unidad: comp.hijoUnidad.trim() };
             ppSums[codigo].cantidad += comp.cantidadPendiente1;
           }
+          if (PP_CON_LOTE.includes(codigo)) {
+            if (!ppEntregaSums[codigo]) ppEntregaSums[codigo] = { cantidad: 0, unidad: comp.hijoUnidad.trim() };
+            ppEntregaSums[codigo].cantidad += comp.cantidadPendiente1;
+          }
         }
-        ppItems = Object.entries(ppSums).map(([codigo, { cantidad, unidad }]) => ({
+
+        ppItems        = Object.entries(ppSums).map(([codigo, { cantidad, unidad }]) => ({
+          codigo, cantidad, unidad, lote: lote1,
+        }));
+        ppEntregaItems = Object.entries(ppEntregaSums).map(([codigo, { cantidad, unidad }]) => ({
           codigo, cantidad, unidad, lote: lote1,
         }));
       } catch {
         opg1Componentes = [];
-        ppItems = [];
+        ppItems         = [];
+        ppEntregaItems  = [];
       }
 
       // ── ¿Hay subproductos PP? → rama OPG2 ────────────────────────────────
@@ -460,7 +474,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
             // ── Paso 5: EPG OPG2 ────────────────────────────────────────
             try {
-              const rowsPP: RowXml3[] = ppItems.map((p) => ({
+              // Entrega los tres PP (PP00001, PP00002, PP00003) con sus cantidades de OPG1
+              const rowsPP: RowXml3[] = ppEntregaItems.map((p) => ({
                 CODIGO_PRODUCTO: p.codigo, LOTE_PRODUCTO: p.lote,
                 BODEGA: filtro.bodegaItemPadre?.trim() ?? "",
                 UNIDAD_PRODUCTO: p.unidad, KIL: p.cantidad, UND: 0,
