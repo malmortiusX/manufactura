@@ -478,6 +478,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
       }
 
+      // ── Paso 5b: Crear lotes PP_CON_LOTE antes del consumo de OPG1 ──────
+      if (puedeOpg1Phase) {
+        try {
+          const ppConLoteLotes: ProductoLote[] = PP_CON_LOTE.map((codigo) => ({ codigo, lote: lote1 }));
+          const existentes = await prisma.loteCreado.findMany({
+            where:  { OR: ppConLoteLotes.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })) },
+            select: { codigoProducto: true, lote: true },
+          });
+          const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
+          const lotesNuevos  = ppConLoteLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
+          if (lotesNuevos.length > 0) {
+            const loteResult = await callSoap(buildXMLLotes(lotesNuevos, fecha));
+            if (loteResult.exitoso) {
+              await Promise.all(
+                lotesNuevos.map((p) =>
+                  prisma.loteCreado.upsert({
+                    where:  { codigoProducto_lote: { codigoProducto: p.codigo, lote: p.lote } },
+                    create: { codigoProducto: p.codigo, lote: p.lote },
+                    update: {},
+                  })
+                )
+              );
+            }
+          }
+        } catch { /* continuar aunque falle */ }
+      }
+
       // ── Paso 6: SPG OPG1 ─────────────────────────────────────────────────
       // Depende de: EPG OPG2 exitosa (si había PP) o de OPG1 directamente (si no había PP)
       if (puedeOpg1Phase && opg1Componentes.length > 0) {

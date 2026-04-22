@@ -277,7 +277,14 @@ function EstadoBadge({ estado }: { estado: EstadoDoc }) {
 }
 
 // ── Panel de resultado de un documento ───────────────────────────────────
-function DocResultPanel({ label, result }: { label: string; result: DocResult }) {
+function DocResultPanel({
+  label, result, onReintentar, retrying,
+}: {
+  label: string;
+  result: DocResult;
+  onReintentar?: () => void;
+  retrying?: boolean;
+}) {
   return (
     <div className={`rounded-xl border p-4 space-y-2 ${
       result.estado === "ENVIADO" ? "border-emerald-200 bg-emerald-50" :
@@ -313,13 +320,32 @@ function DocResultPanel({ label, result }: { label: string; result: DocResult })
       {result.estado === "PENDIENTE" && !result.exitoso && result.errores.length === 0 && (
         <p className="text-xs text-slate-500">No se envió — depende del documento anterior.</p>
       )}
+      {result.estado === "ERROR" && onReintentar && (
+        <button
+          onClick={onReintentar}
+          disabled={retrying}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <svg className={`w-3.5 h-3.5 ${retrying ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Reintentar transmisión
+        </button>
+      )}
     </div>
   );
 }
 
 // ── Panel de un OPG (3 documentos) ───────────────────────────────────────
-function OPGPanel({ titulo, num, result, accent }: {
-  titulo: string; num: number; result: OPGResult; accent: string;
+function OPGPanel({ titulo, num, result, accent, retrying, onReintentarOrden, onReintentarConsumo, onReintentarEntrega }: {
+  titulo: string;
+  num: number;
+  result: OPGResult;
+  accent: string;
+  retrying?: boolean;
+  onReintentarOrden?:   () => void;
+  onReintentarConsumo?: () => void;
+  onReintentarEntrega?: () => void;
 }) {
   const todoOk = result.orden.exitoso && result.consumo.exitoso && result.entrega.exitoso;
   return (
@@ -352,9 +378,9 @@ function OPGPanel({ titulo, num, result, accent }: {
         )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <DocResultPanel label="Orden de Producción" result={result.orden} />
-        <DocResultPanel label="Consumo (SPG)"       result={result.consumo} />
-        <DocResultPanel label="Entrega (EPG)"       result={result.entrega} />
+        <DocResultPanel label="Orden de Producción" result={result.orden}   onReintentar={onReintentarOrden}   retrying={retrying} />
+        <DocResultPanel label="Consumo (SPG)"       result={result.consumo} onReintentar={onReintentarConsumo} retrying={retrying} />
+        <DocResultPanel label="Entrega (EPG)"       result={result.entrega} onReintentar={onReintentarEntrega} retrying={retrying} />
       </div>
     </div>
   );
@@ -414,6 +440,7 @@ export default function BeneficioDetailPage() {
   const [transmitting, setTransmitting]     = useState(false);
   const [transmitResult, setTransmitResult] = useState<TransmitResult | null>(null);
   const [transmitError, setTransmitError]   = useState<string | null>(null);
+  const [retrying, setRetrying]             = useState(false);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
 
   const cargarDatos = useCallback(async () => {
@@ -446,11 +473,14 @@ export default function BeneficioDetailPage() {
   const xmlLotes    = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
   const xml1        = filtro ? buildXML1(filtro, rows, consecOpg1) : "";
 
-  const transmitir = useCallback(async () => {
+  const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
-    setTransmitting(true);
-    setTransmitResult(null);
-    setLotesResult(null);
+    if (esReintento) setRetrying(true);
+    else {
+      setTransmitting(true);
+      setTransmitResult(null);
+      setLotesResult(null);
+    }
     setTransmitError(null);
 
     try {
@@ -531,6 +561,7 @@ export default function BeneficioDetailPage() {
       setTransmitError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setTransmitting(false);
+      setRetrying(false);
     }
   }, [id, bache, filtro, rows]);
 
@@ -600,9 +631,9 @@ export default function BeneficioDetailPage() {
 
           {!loading && rows.length > 0 && (
             <button
-              onClick={transmitir}
-              disabled={transmitting || loading}
-              className="flex items-center gap-2 text-sm font-semibold bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white px-4 py-2 rounded-xl transition-all shadow-sm"
+              onClick={() => transmitir(false)}
+              disabled={transmitting || retrying || loading}
+              className="flex items-center gap-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-4 py-2 rounded-xl transition-all shadow-sm"
             >
               {transmitting ? (
                 <>
@@ -668,6 +699,19 @@ export default function BeneficioDetailPage() {
                 num={tr.opg2Num}
                 result={tr.opg2}
                 accent="bg-orange-50 text-orange-600 border-orange-200"
+                retrying={retrying}
+                onReintentarOrden={
+                  !tr.opg2.orden.exitoso && tr.opg1.orden.exitoso
+                    ? () => transmitir(true) : undefined
+                }
+                onReintentarConsumo={
+                  !tr.opg2.consumo.exitoso && tr.opg2.orden.exitoso
+                    ? () => transmitir(true) : undefined
+                }
+                onReintentarEntrega={
+                  !tr.opg2.entrega.exitoso && tr.opg2.consumo.exitoso
+                    ? () => transmitir(true) : undefined
+                }
               />
             </div>
           )}
@@ -686,6 +730,20 @@ export default function BeneficioDetailPage() {
               num={tr.opg1Num}
               result={tr.opg1}
               accent="bg-rose-50 text-rose-600 border-rose-200"
+              retrying={retrying}
+              onReintentarOrden={
+                !tr.opg1.orden.exitoso
+                  ? () => transmitir(true) : undefined
+              }
+              onReintentarConsumo={
+                !tr.opg1.consumo.exitoso && tr.opg1.orden.exitoso &&
+                (tr.opg2Num === 0 || tr.opg2.entrega.exitoso)
+                  ? () => transmitir(true) : undefined
+              }
+              onReintentarEntrega={
+                !tr.opg1.entrega.exitoso && tr.opg1.consumo.exitoso
+                  ? () => transmitir(true) : undefined
+              }
             />
           </div>
         </div>
