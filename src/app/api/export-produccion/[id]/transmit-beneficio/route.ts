@@ -380,7 +380,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const codigo = comp.hijoReferencia.trim();
           if (PP_CODIGOS.includes(codigo)) {
             if (!ppSums[codigo]) ppSums[codigo] = { cantidad: 0, unidad: comp.hijoUnidad.trim() };
-            ppSums[codigo].cantidad += comp.cantidadPendiente;
+            ppSums[codigo].cantidad += comp.cantidadPendiente1;
           }
         }
         ppItems = Object.entries(ppSums).map(([codigo, { cantidad, unidad }]) => ({
