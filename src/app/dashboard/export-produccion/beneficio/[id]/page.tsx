@@ -189,7 +189,7 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
       pA(fecha,                   8) +
       pA(fecha,                   8) +
       pA("0001",                  4) +
-      bodega +
+      pA("",                      5) +
       pA("",                      4) +
       pA(row.LOTE_PRODUCTO,      15) +
       pA("",                   2000) +
