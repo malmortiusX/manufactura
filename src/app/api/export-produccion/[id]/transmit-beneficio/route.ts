@@ -94,7 +94,7 @@ function buildXML1b(
     pA(fecha,              8) +
     pA(fecha,              8) +
     pA("0001",             4) +
-    bodega +
+    pA("", 5) +
     pA("",                 4) +
     pA(item.lote,         15) +
     pA("",              2000) +
@@ -158,8 +158,8 @@ function buildXML2(
       pA("70010401",           15) +
       pA("",    15) +
       pA(comp.hijoUnidad,       4) +
-      pQ(comp.cantidadPendiente, 15, 4) +
-      pQ(0,     15, 4) +
+      pQ(comp.cantidadPendiente1, 15, 4) +
+      pQ(comp.cantidadPendiente2,     15, 4) +
       pA("",   255) +
       pA("",  2000)
     );

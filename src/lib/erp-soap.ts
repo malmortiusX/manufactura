@@ -69,7 +69,8 @@ export interface ComponenteOP {
   bodegaId:          string;   // Bodega_id         (trimmed)
   hijoReferencia:    string;   // Hijo_Referencia   (trimmed)
   hijoUnidad:        string;   // Hijo_unidadMedida (trimmed)
-  cantidadPendiente: number;   // Cantidad_pendiente1
+  cantidadPendiente1: number;   // Cantidad_pendiente1
+  cantidadPendiente2: number;   // Cantidad_pendiente2
 }
 
 // ── Envelope para EjecutarConsultaXML (consulta de componentes) ───────────
@@ -130,7 +131,8 @@ function parseComponentesRespuesta(xml: string): ComponenteOP[] {
       bodegaId:          get(content, "Bodega_id"),
       hijoReferencia:    get(content, "Hijo_Referencia"),
       hijoUnidad:        get(content, "Hijo_unidadMedida"),
-      cantidadPendiente: parseFloat(get(content, "Cantidad_pendiente1")) || 0,
+      cantidadPendiente1: parseFloat(get(content, "Cantidad_pendiente1")) || 0,
+      cantidadPendiente2: parseFloat(get(content, "Cantidad_pendiente2")) || 0,
     });
   }
   return componentes;
