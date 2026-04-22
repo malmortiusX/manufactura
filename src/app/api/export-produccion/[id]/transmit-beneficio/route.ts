@@ -21,8 +21,8 @@ import {
 
 export type { ErpError, DocResult } from "@/lib/erp-soap";
 
-// Productos en proceso intermedios que generan OPG2
-const PP_CODIGOS = ["PP00001", "PP00002", "PP00003"];
+// Producto en proceso intermedio que genera OPG2
+const PP_CODIGOS = ["PP00002"];
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
 const pN = (val: string | number | null | undefined, len: number) =>
