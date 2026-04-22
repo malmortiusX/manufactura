@@ -479,10 +479,8 @@ export default function BeneficioDetailPage() {
         const lotesData: LoteCreacionResult = JSON.parse(lotesText);
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
         setLotesResult(lotesData);
-        if (!lotesData.exitoso && lotesData.nuevos.length > 0) {
-          setTransmitting(false);
-          return;
-        }
+        // En Beneficio no se detiene el proceso si los lotes fallan:
+        // pueden ya existir en el ERP aunque no estén en nuestra DB.
       }
 
       // ── Paso 2: Obtener consecutivo OPG1 ────────────────────────────────
