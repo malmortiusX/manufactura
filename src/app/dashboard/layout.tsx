@@ -15,6 +15,7 @@ const pageTitles: Record<string, string> = {
   "/dashboard/export-produccion/entrada-beneficio":      "Entrada Beneficio",
   "/dashboard/export-produccion/salida-beneficio":       "Salida Beneficio",
   "/dashboard/export-produccion/beneficio":              "Beneficio",
+  "/dashboard/export-produccion/desprese":               "Desprese",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
      pathname.startsWith("/dashboard/export-produccion/salida-beneficio/")  ? "Salida Beneficio"  :
      pathname.startsWith("/dashboard/export-produccion/entrada-beneficio/") ? "Entrada Beneficio" :
      pathname.startsWith("/dashboard/export-produccion/beneficio/")         ? "Beneficio"         :
+     pathname.startsWith("/dashboard/export-produccion/desprese/")          ? "Desprese"          :
      "Dashboard");
 
   return (

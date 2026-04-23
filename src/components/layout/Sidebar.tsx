@@ -67,6 +67,7 @@ const exportGroups = [
       </svg>
     ),
     children: [
+      { label: "Desprese",          href: "/dashboard/export-produccion/desprese" },
       { label: "Beneficio",         href: "/dashboard/export-produccion/beneficio" },
       { label: "Entrada Beneficio", href: "/dashboard/export-produccion/entrada-beneficio" },
       { label: "Salida Beneficio",  href: "/dashboard/export-produccion/salida-beneficio" },
