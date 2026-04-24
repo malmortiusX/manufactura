@@ -18,6 +18,10 @@ export interface FilterSet {
   instalacion: string | null;
   bodegaItemPadre: string | null;
   modulo: string | null;
+  bodegaConsumo: string | null;
+  ubicacionConsumo: string | null;
+  tipoDocumentoConsumo: string | null;
+  tipoMovimientoConsumo: string | null;
 }
 
 export type ModuloKey =
@@ -97,6 +101,10 @@ const emptyForm = {
   terceroPlanificador: "",
   instalacion: "",
   bodegaItemPadre: "",
+  bodegaConsumo: "",
+  ubicacionConsumo: "",
+  tipoDocumentoConsumo: "",
+  tipoMovimientoConsumo: "",
 };
 
 export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
@@ -149,17 +157,21 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
 
   function handleEdit(item: FilterSet) {
     setForm({
-      identificador:       item.identificador,
-      nombre:              item.nombre,
-      bodega:              item.bodega              ?? "",
-      ubicacion:           item.ubicacion            ?? "",
-      tipoDocumento:       item.tipoDocumento        ?? "",
-      tipoMovimiento:      item.tipoMovimiento       ?? "",
-      fecha:               item.fecha.split("T")[0],
-      centroOperacion:     item.centroOperacion      ?? "",
-      terceroPlanificador: item.terceroPlanificador  ?? "",
-      instalacion:         item.instalacion          ?? "",
-      bodegaItemPadre:     item.bodegaItemPadre      ?? "",
+      identificador:          item.identificador,
+      nombre:                 item.nombre,
+      bodega:                 item.bodega                 ?? "",
+      ubicacion:              item.ubicacion              ?? "",
+      tipoDocumento:          item.tipoDocumento          ?? "",
+      tipoMovimiento:         item.tipoMovimiento         ?? "",
+      fecha:                  item.fecha.split("T")[0],
+      centroOperacion:        item.centroOperacion        ?? "",
+      terceroPlanificador:    item.terceroPlanificador    ?? "",
+      instalacion:            item.instalacion            ?? "",
+      bodegaItemPadre:        item.bodegaItemPadre        ?? "",
+      bodegaConsumo:          item.bodegaConsumo          ?? "",
+      ubicacionConsumo:       item.ubicacionConsumo       ?? "",
+      tipoDocumentoConsumo:   item.tipoDocumentoConsumo   ?? "",
+      tipoMovimientoConsumo:  item.tipoMovimientoConsumo  ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -414,6 +426,24 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
             <Field label="Instalación" name="instalacion" value={form.instalacion} onChange={handleChange} maxLength={3} placeholder="Ej: I01" />
             <Field label="Bodega Item Padre" name="bodegaItemPadre" value={form.bodegaItemPadre} onChange={handleChange} maxLength={5} placeholder="Ej: BO01" />
           </div>
+
+          {modulo === "desprese" && (
+            <>
+              <div className="my-6 border-t border-slate-100" />
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  Consumo
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-amber-100">
+                <Field label="Bodega" name="bodegaConsumo" value={form.bodegaConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: BOD02" />
+                <Field label="Ubicación" name="ubicacionConsumo" value={form.ubicacionConsumo} onChange={handleChange} maxLength={10} placeholder="Ej: B-01" />
+                <Field label="Tipo Documento" name="tipoDocumentoConsumo" value={form.tipoDocumentoConsumo} onChange={handleChange} maxLength={3} placeholder="Ej: FAC" />
+                <Field label="Tipo Movimiento" name="tipoMovimientoConsumo" value={form.tipoMovimientoConsumo} onChange={handleChange} maxLength={5} placeholder="Ej: SAL" />
+              </div>
+            </>
+          )}
 
           <div className="flex items-center justify-end gap-3 mt-8 pt-6 border-t border-slate-100">
             <button type="button" onClick={handleCancel} className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors">

@@ -82,7 +82,12 @@ model ExportProduccion {
   terceroPlanificador     String?  @db.Char(15)
   instalacion             String?  @db.Char(3)
   bodegaItemPadre         String?  @db.Char(5)
-  modulo                  String?  @db.VarChar(30)  // "entrada-desprese" | "salida-desprese" | "entrada-beneficio" | "salida-beneficio"
+  modulo                  String?  @db.VarChar(30)  // "entrada-desprese" | "salida-desprese" | "entrada-beneficio" | "salida-beneficio" | "desprese"
+  // Consumo (desprese)
+  bodegaConsumo           String?  @db.Char(20)
+  ubicacionConsumo        String?  @db.Char(10)
+  tipoDocumentoConsumo    String?  @db.Char(3)
+  tipoMovimientoConsumo   String?  @db.Char(5)
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
