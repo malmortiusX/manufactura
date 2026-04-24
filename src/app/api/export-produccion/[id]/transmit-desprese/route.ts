@@ -173,6 +173,68 @@ function buildXML2(
   return [opening, encabezado, ...productLines, closing].join("\n");
 }
 
+// ── XML2Consumo — SPG OPG2 Desprese (consumo libre, clase_op=004) ────────
+// Igual que buildXML2 pero:
+//   f470_id_bodega → bodegaItemPadre del filtro (no la bodega del movimiento)
+//   f470_id_lote   → lote del producto consumido (LOTE_PRODUCTO de la fila)
+function buildXML2Consumo(
+  centroOperacion: string,
+  nombre:          string,
+  fecha:           string,
+  consecOpg:       number,
+  rows:            RowXml3[],
+  bodegaItemPadre: string,
+): string {
+  const opening = "000000100000001001";
+
+  const encabezado =
+    pN(2,   7) + pN(450, 4) + pN(3, 2) + pN(1, 2) + pN(1, 3) + pN(1, 1) +
+    pA(centroOperacion, 3) +
+    pA("SCG",           3) +
+    pN(1,   8) +
+    pA(fecha,           8) +
+    pN(1,   1) + pN(0, 1) + pN(710, 3) +
+    pA("",  15) +
+    pA(nombre,        255) +
+    pA("01",  2) +
+    pA("",   15) +
+    pA("OPG", 3) +
+    pN(consecOpg, 8);
+
+  const productLines = rows.map((row, i) =>
+    pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
+    pA(centroOperacion,      3) +
+    pA("SCG",                3) +
+    pN(1,      8) +
+    pN(i + 1, 10) +
+    pN(0,      7) +
+    pA("PI00001",           50) +   // padreReferencia = producto PI
+    pA("",    20) + pA("",    20) + pA("",    20) +
+    pN(0,     10) +
+    pN(0,      7) +
+    pA(row.CODIGO_PRODUCTO, 50) +   // hijoReferencia = producto consumido
+    pA("",    20) + pA("",    20) + pA("",    20) +
+    pA(bodegaItemPadre,      5) +   // f470_id_bodega = bodegaItemPadre del filtro
+    pA("",    10) +
+    pA(row.LOTE_PRODUCTO,   15) +   // f470_id_lote = lote del producto consumido
+    pN(701,    3) +
+    pA("01",   2) +
+    pA(centroOperacion,      3) +
+    pA("31",  20) +
+    pA("70010401",          15) +
+    pA("",    15) +
+    pA(row.UNIDAD_PRODUCTO,  4) +
+    pQ(Number(row.KIL), 15, 4) +
+    pQ(Number(row.UND), 15, 4) +
+    pA("",   255) +
+    pA("",  2000)
+  );
+
+  const closingNum = rows.length + 3;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+  return [opening, encabezado, ...productLines, closing].join("\n");
+}
+
 // ── XML3 — Entrega de Producción EPG (tipo 450-01/470-02) ─────────────────
 interface RowXml3 {
   CODIGO_PRODUCTO: string;
@@ -540,21 +602,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (ordenOpg2Result.exitoso) {
 
           // ── Paso 4: SPG OPG2 ──────────────────────────────────────────
-          // Usa los registros de consumo seleccionados por el usuario (clase_op=004,
-          // sin lista de materiales). Si no se enviaron, consulta los componentes del ERP.
+          // clase_op=004 (sin lista de materiales): usa los registros de consumo
+          // seleccionados por el usuario. Bodega = bodegaItemPadre; lote = del producto.
+          // Si no se enviaron filas, consulta los componentes del ERP como fallback.
           try {
-            const opg2Componentes: ComponenteOP[] =
-              rowsConsumo.length > 0
-                ? rowsConsumo.map((r) => ({
-                    padreReferencia:    "PI00001",
-                    bodegaId:           r.BODEGA.trim(),
-                    hijoReferencia:     r.CODIGO_PRODUCTO.trim(),
-                    hijoUnidad:         r.UNIDAD_PRODUCTO.trim(),
-                    cantidadPendiente1: Number(r.KIL),
-                    cantidadPendiente2: Number(r.UND),
-                  }))
-                : await queryComponentesOP(co, "OPG", consecOpg2);
-            xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
+            if (rowsConsumo.length > 0) {
+              xml2b = buildXML2Consumo(
+                co, filtro.nombre, fecha, consecOpg2,
+                rowsConsumo,
+                filtro.bodegaItemPadre?.trim() ?? "",
+              );
+            } else {
+              const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
+              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
+            }
             await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
             consumoOpg2Result = await callSoap(xml2b);
           } catch (e) { consumoOpg2Result = mkErr(e); }
