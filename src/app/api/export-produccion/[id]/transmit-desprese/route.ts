@@ -41,9 +41,9 @@ function pQ(val: number, intLen: number, dec: number): string {
   return intPart.padStart(intLen, "0") + "." + decPart.padEnd(dec, "0");
 }
 
-// ── XML1b — Orden de Producción para PP (OPG2) ────────────────────────────
-// Mismo formato que OPG1 (tipo 850/851, clase_op=002).
-// Las líneas 851 son los PP00001/PP00002/PP00003 presentes en componentes de OPG1.
+// ── XML1b — Orden de Producción para PI (OPG2) ────────────────────────────
+// Mismo formato que OPG1 (tipo 850/851), pero clase_op=004 ya que PI00001
+// no tiene lista de materiales (permite consumir cualquier producto).
 interface PpItem { codigo: string; cantidad: number; unidad: string; lote: string; }
 
 function buildXML1b(
@@ -69,7 +69,7 @@ function buildXML1b(
     pA("OPG",                3) +
     pN(1,   8) +
     pA(instalacion,          3) +
-    pA("002",                3) +   // clase_op = 002
+    pA("004",                3) +   // clase_op = 004 (sin lista de materiales)
     pA("",                  30) +
     pA("",                  30) +
     pA("",                  30) +
