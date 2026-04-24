@@ -395,8 +395,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       xml1:             string;
       lotesPorProducto: Record<string, string>;
       rows:             RowXml3[];
+      rowsConsumo:      RowXml3[];
     };
-    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [] } = body;
+    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [] } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
@@ -539,8 +540,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (ordenOpg2Result.exitoso) {
 
           // ── Paso 4: SPG OPG2 ──────────────────────────────────────────
+          // Usa los registros de consumo seleccionados por el usuario (clase_op=004,
+          // sin lista de materiales). Si no se enviaron, consulta los componentes del ERP.
           try {
-            const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
+            const opg2Componentes: ComponenteOP[] =
+              rowsConsumo.length > 0
+                ? rowsConsumo.map((r) => ({
+                    padreReferencia:    "PI00001",
+                    bodegaId:           r.BODEGA.trim(),
+                    hijoReferencia:     r.CODIGO_PRODUCTO.trim(),
+                    hijoUnidad:         r.UNIDAD_PRODUCTO.trim(),
+                    cantidadPendiente1: Number(r.KIL),
+                    cantidadPendiente2: Number(r.UND),
+                  }))
+                : await queryComponentesOP(co, "OPG", consecOpg2);
             xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
             await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
             consumoOpg2Result = await callSoap(xml2b);

@@ -419,6 +419,10 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
+// ── Utilidad clave de fila consumo ────────────────────────────────────────
+const rowKey = (r: ProductRow) =>
+  `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO ?? ""}|${r.BODEGA}|${r.UBICACION ?? ""}`;
+
 // ── Página principal ───────────────────────────────────────────────────────
 const fmtNum = (n: number) =>
   new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -432,6 +436,8 @@ export default function DesPreseDetailPage() {
 
   const [filtro, setFiltro]   = useState<Filtro | null>(null);
   const [rows, setRows]       = useState<ProductRow[]>([]);
+  const [rowsConsumo, setRowsConsumo]                 = useState<ProductRow[]>([]);
+  const [selectedConsumoKeys, setSelectedConsumoKeys] = useState<Set<string>>(new Set());
   const [bache, setBache]     = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -458,6 +464,9 @@ export default function DesPreseDetailPage() {
       setFiltro(data.filtro);
       setBache(data.bache);
       setRows(data.rows);
+      const consumo: ProductRow[] = data.rowsConsumo ?? [];
+      setRowsConsumo(consumo);
+      setSelectedConsumoKeys(new Set(consumo.map(rowKey)));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -475,6 +484,9 @@ export default function DesPreseDetailPage() {
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
+
+    // Filas de consumo seleccionadas por el usuario
+    const rowsConsumoSeleccionadas = rowsConsumo.filter((r) => selectedConsumoKeys.has(rowKey(r)));
     if (esReintento) setRetrying(true);
     else {
       setTransmitting(true);
@@ -488,7 +500,7 @@ export default function DesPreseDetailPage() {
       const uniqueLotes: ProductoLote[] = Array.from(
         new Map(
           rows
-            .filter((r) => r.LOTE_PRODUTO?.trim() || r.LOTE_PRODUCTO?.trim())
+            .filter((r) => r.LOTE_PRODUCTO?.trim())
             .map((r): [string, ProductoLote] => [
               `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
               { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
@@ -538,6 +550,16 @@ export default function DesPreseDetailPage() {
         UND:             Number(r.UND),
       }));
 
+      const rowsConsumoParaXml = rowsConsumoSeleccionadas.map((r) => ({
+        CODIGO_PRODUTO:  r.CODIGO_PRODUCTO,   // alias alternativo para compatibilidad
+        CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
+        LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
+        BODEGA:          r.BODEGA,
+        UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
+        KIL:             Number(r.KIL),
+        UND:             Number(r.UND),
+      }));
+
       const res  = await fetch(`/api/export-produccion/${id}/transmit-desprese`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -547,6 +569,7 @@ export default function DesPreseDetailPage() {
           xml1:            xml1Final,
           lotesPorProducto,
           rows:            rowsParaXml3,
+          rowsConsumo:     rowsConsumoParaXml,
         }),
       });
       const text = await res.text();
@@ -560,7 +583,7 @@ export default function DesPreseDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows]);
+  }, [id, bache, filtro, rows, rowsConsumo, selectedConsumoKeys]);
 
   const tr = transmitResult;
 
@@ -788,13 +811,145 @@ export default function DesPreseDetailPage() {
         </>
       )}
 
-      {/* Tabla de productos */}
-      {(rows.length > 0 || loading) && (
+      {/* Tabla Consumo */}
+      {(rowsConsumo.length > 0 || loading) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Encabezado con contador de selección */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Consumo OPG2
+              </span>
+            </div>
+            {!loading && rowsConsumo.length > 0 && (
+              <span className="text-xs text-slate-500">
+                <span className="font-semibold text-orange-600">{selectedConsumoKeys.size}</span>
+                {" / "}
+                {rowsConsumo.length} seleccionados
+              </span>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
+                <tr className="border-b border-slate-100">
+                  <th className="px-4 py-3 w-10">
+                    {!loading && rowsConsumo.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={selectedConsumoKeys.size === rowsConsumo.length && rowsConsumo.length > 0}
+                        onChange={(e) => {
+                          setSelectedConsumoKeys(
+                            e.target.checked ? new Set(rowsConsumo.map(rowKey)) : new Set()
+                          );
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                      />
+                    )}
+                  </th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Código</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Descripción</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Bodega</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Lote</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">U/M</th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Kilogramos</th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Unidades</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loading
+                  ? Array.from({ length: 3 }).map((_, i) => (
+                      <tr key={i} className="animate-pulse">
+                        {Array.from({ length: 8 }).map((__, j) => (
+                          <td key={j} className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-3/4" /></td>
+                        ))}
+                      </tr>
+                    ))
+                  : rowsConsumo.map((row, i) => {
+                      const key = rowKey(row);
+                      const isSelected = selectedConsumoKeys.has(key);
+                      return (
+                        <tr
+                          key={i}
+                          onClick={() => {
+                            setSelectedConsumoKeys((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(key)) next.delete(key); else next.add(key);
+                              return next;
+                            });
+                          }}
+                          className={`cursor-pointer transition-colors ${
+                            isSelected ? "bg-orange-50 hover:bg-orange-100" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                setSelectedConsumoKeys((prev) => {
+                                  const next = new Set(prev);
+                                  if (e.target.checked) next.add(key); else next.delete(key);
+                                  return next;
+                                });
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-5 py-3 font-mono text-xs text-slate-700">{row.CODIGO_PRODUCTO}</td>
+                          <td className="px-5 py-3 text-slate-800 font-medium max-w-[200px] truncate">{row.DESCRIPCION_PRODUCTO}</td>
+                          <td className="px-5 py-3 text-slate-600">{row.BODEGA || "—"}</td>
+                          <td className="px-5 py-3 text-slate-600">{row.LOTE_PRODUCTO || "—"}</td>
+                          <td className="px-5 py-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                              {row.UNIDAD_PRODUCTO}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.KIL))}</td>
+                          <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.UND))}</td>
+                        </tr>
+                      );
+                    })}
+              </tbody>
+              {!loading && rowsConsumo.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50">
+                    <td colSpan={6} className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase">
+                      Total seleccionados
+                    </td>
+                    <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">
+                      {fmtNum(rowsConsumo.filter((r) => selectedConsumoKeys.has(rowKey(r))).reduce((s, r) => s + Number(r.KIL), 0))}
+                    </td>
+                    <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">
+                      {fmtNum(rowsConsumo.filter((r) => selectedConsumoKeys.has(rowKey(r))).reduce((s, r) => s + Number(r.UND), 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+            {!loading && rowsConsumo.length === 0 && (
+              <div className="text-center py-8 text-slate-400">
+                <p className="text-sm">No se encontraron registros de consumo con los filtros configurados</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tabla de productos terminados */}
+      {(rows.length > 0 || loading) && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+              Producto terminado OPG1
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Código</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Descripción</th>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Bodega</th>

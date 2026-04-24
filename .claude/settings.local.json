@@ -4,7 +4,8 @@
       "Bash(mkdir -p \"C:/laragon/www/nexttest/src/app/api/export-produccion/[id]/results\")",
       "Bash(mkdir -p \"C:/laragon/www/nexttest/src/app/dashboard/export-production/[id]\")",
       "Bash(npx prisma:*)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npx tsc *)"
     ]
   }
 }
