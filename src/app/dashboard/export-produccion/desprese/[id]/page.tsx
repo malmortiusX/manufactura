@@ -436,8 +436,8 @@ export default function DesPreseDetailPage() {
 
   const [filtro, setFiltro]   = useState<Filtro | null>(null);
   const [rows, setRows]       = useState<ProductRow[]>([]);
-  const [rowsConsumo, setRowsConsumo]                 = useState<ProductRow[]>([]);
-  const [selectedConsumoKeys, setSelectedConsumoKeys] = useState<Set<string>>(new Set());
+  const [rowsConsumo, setRowsConsumo]                   = useState<ProductRow[]>([]);
+  const [selectedConsumoIdx, setSelectedConsumoIdx]     = useState<Set<number>>(new Set());
   const [bache, setBache]     = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -466,7 +466,7 @@ export default function DesPreseDetailPage() {
       setRows(data.rows);
       const consumo: ProductRow[] = data.rowsConsumo ?? [];
       setRowsConsumo(consumo);
-      setSelectedConsumoKeys(new Set(consumo.map(rowKey)));
+      setSelectedConsumoIdx(new Set(consumo.map((_, i) => i)));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -486,7 +486,7 @@ export default function DesPreseDetailPage() {
     if (!bache || !filtro) return;
 
     // Filas de consumo seleccionadas por el usuario
-    const rowsConsumoSeleccionadas = rowsConsumo.filter((r) => selectedConsumoKeys.has(rowKey(r)));
+    const rowsConsumoSeleccionadas = rowsConsumo.filter((_, i) => selectedConsumoIdx.has(i));
     if (esReintento) setRetrying(true);
     else {
       setTransmitting(true);
@@ -583,7 +583,7 @@ export default function DesPreseDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsConsumo, selectedConsumoKeys]);
+  }, [id, bache, filtro, rows, rowsConsumo, selectedConsumoIdx]);
 
   const tr = transmitResult;
 
@@ -824,7 +824,7 @@ export default function DesPreseDetailPage() {
             </div>
             {!loading && rowsConsumo.length > 0 && (
               <span className="text-xs text-slate-500">
-                <span className="font-semibold text-orange-600">{selectedConsumoKeys.size}</span>
+                <span className="font-semibold text-orange-600">{selectedConsumoIdx.size}</span>
                 {" / "}
                 {rowsConsumo.length} seleccionados
               </span>
@@ -838,10 +838,12 @@ export default function DesPreseDetailPage() {
                     {!loading && rowsConsumo.length > 0 && (
                       <input
                         type="checkbox"
-                        checked={selectedConsumoKeys.size === rowsConsumo.length && rowsConsumo.length > 0}
+                        checked={selectedConsumoIdx.size === rowsConsumo.length && rowsConsumo.length > 0}
                         onChange={(e) => {
-                          setSelectedConsumoKeys(
-                            e.target.checked ? new Set(rowsConsumo.map(rowKey)) : new Set()
+                          setSelectedConsumoIdx(
+                            e.target.checked
+                              ? new Set(rowsConsumo.map((_, i) => i))
+                              : new Set()
                           );
                         }}
                         className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
@@ -867,15 +869,14 @@ export default function DesPreseDetailPage() {
                       </tr>
                     ))
                   : rowsConsumo.map((row, i) => {
-                      const key = rowKey(row);
-                      const isSelected = selectedConsumoKeys.has(key);
+                      const isSelected = selectedConsumoIdx.has(i);
                       return (
                         <tr
                           key={i}
                           onClick={() => {
-                            setSelectedConsumoKeys((prev) => {
+                            setSelectedConsumoIdx((prev) => {
                               const next = new Set(prev);
-                              if (next.has(key)) next.delete(key); else next.add(key);
+                              if (next.has(i)) next.delete(i); else next.add(i);
                               return next;
                             });
                           }}
@@ -888,9 +889,9 @@ export default function DesPreseDetailPage() {
                               type="checkbox"
                               checked={isSelected}
                               onChange={(e) => {
-                                setSelectedConsumoKeys((prev) => {
+                                setSelectedConsumoIdx((prev) => {
                                   const next = new Set(prev);
-                                  if (e.target.checked) next.add(key); else next.delete(key);
+                                  if (e.target.checked) next.add(i); else next.delete(i);
                                   return next;
                                 });
                               }}
@@ -919,10 +920,10 @@ export default function DesPreseDetailPage() {
                       Total seleccionados
                     </td>
                     <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">
-                      {fmtNum(rowsConsumo.filter((r) => selectedConsumoKeys.has(rowKey(r))).reduce((s, r) => s + Number(r.KIL), 0))}
+                      {fmtNum(rowsConsumo.filter((_, i) => selectedConsumoIdx.has(i)).reduce((s, r) => s + Number(r.KIL), 0))}
                     </td>
                     <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">
-                      {fmtNum(rowsConsumo.filter((r) => selectedConsumoKeys.has(rowKey(r))).reduce((s, r) => s + Number(r.UND), 0))}
+                      {fmtNum(rowsConsumo.filter((_, i) => selectedConsumoIdx.has(i)).reduce((s, r) => s + Number(r.UND), 0))}
                     </td>
                   </tr>
                 </tfoot>

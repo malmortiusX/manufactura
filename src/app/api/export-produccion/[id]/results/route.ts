@@ -21,6 +21,7 @@ function parseFecha(raw: Date | string): string {
   return `${raw.getUTCFullYear()}-${String(raw.getUTCMonth() + 1).padStart(2, "0")}-${String(raw.getUTCDate()).padStart(2, "0")}`;
 }
 
+// Columnas agrupadas (para productos terminados)
 const selectCols = `
   B.UNDBASE   AS UNIDAD_PRODUCTO,
   B.Bodega    AS BODEGA,
@@ -39,6 +40,23 @@ const selectCols = `
 
 const groupBy = `B.UNDBASE, B.Bodega, B.codubica, B.CODIGO, B.NOMBRE, B.CODLOTE, B.bache`;
 const orderBy = `B.Bodega, B.codubica, B.CODIGO`;
+
+// Columnas individuales (para consumo — sin GROUP BY)
+const selectColsIndividual = `
+  B.UNDBASE   AS UNIDAD_PRODUCTO,
+  B.Bodega    AS BODEGA,
+  B.codubica  AS UBICACION,
+  B.CODIGO    AS CODIGO_PRODUCTO,
+  B.NOMBRE    AS DESCRIPCION_PRODUCTO,
+  B.CODLOTE   AS LOTE_PRODUCTO,
+  B.bache,
+  CASE B.UNDBASE WHEN 'UND' THEN B.CANTEMPAQ ELSE B.CANTIDAD  END AS KIL,
+  CASE B.UNDBASE WHEN 'UND' THEN B.CANTIDAD  ELSE B.CANTEMPAQ END AS UND,
+  CASE
+    WHEN (CASE B.UNDBASE WHEN 'UND' THEN B.CANTIDAD ELSE B.CANTEMPAQ END) = 0 THEN 0
+    ELSE (CASE B.UNDBASE WHEN 'UND' THEN B.CANTEMPAQ ELSE B.CANTIDAD  END)
+       / (CASE B.UNDBASE WHEN 'UND' THEN B.CANTIDAD  ELSE B.CANTEMPAQ END)
+  END AS PROMEDIO_PESO`;
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -59,6 +77,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     `A.Tipodcto = B.Tipodcto`,
     `A.Nrodcto  = B.Nrodcto`,
     `(B.CANTIDAD <> 0 OR B.CANTEMPAQ <> 0)`,
+    `(B.bache = 0 OR B.bache IS NULL)`,   // excluir registros ya exportados
   ];
   if (filtro.tipoDocumento?.trim()) whereConditions.push(`A.Tipodcto  = '${s(filtro.tipoDocumento)}'`);
   if (filtro.tipoMovimiento?.trim()) whereConditions.push(`B.TIPOMVTO  = '${s(filtro.tipoMovimiento)}'`);
@@ -79,6 +98,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     `A.Tipodcto = B.Tipodcto`,
     `A.Nrodcto  = B.Nrodcto`,
     `(B.CANTIDAD <> 0 OR B.CANTEMPAQ <> 0)`,
+    `(B.bache = 0 OR B.bache IS NULL)`,   // excluir registros ya exportados
   ];
   if (filtro.tipoDocumentoConsumo?.trim())  whereConsumoConditions.push(`A.Tipodcto  = '${s(filtro.tipoDocumentoConsumo)}'`);
   if (filtro.tipoMovimientoConsumo?.trim()) whereConsumoConditions.push(`B.TIPOMVTO  = '${s(filtro.tipoMovimientoConsumo)}'`);
@@ -151,15 +171,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       `;
       const rows = await tx.$queryRawUnsafe(selectSql);
 
-      // 5. Consultar registros de consumo (si aplica)
+      // 5. Consultar registros de consumo individualmente (sin GROUP BY)
       let rowsConsumo: unknown[] = [];
       if (hasConsumo) {
         const selectConsumoSql = `
-          SELECT ${selectCols}
+          SELECT ${selectColsIndividual}
           FROM Mvdcto B
           WHERE B.bache = ${bache}
             AND (B.CANTIDAD <> 0 OR B.CANTEMPAQ <> 0)${consumoExtraWhere}
-          GROUP BY ${groupBy}
           ORDER BY ${orderBy}
         `;
         rowsConsumo = await tx.$queryRawUnsafe(selectConsumoSql);
