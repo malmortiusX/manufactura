@@ -67,8 +67,9 @@ const exportGroups = [
       </svg>
     ),
     children: [
-      { label: "Desprese",          href: "/dashboard/export-produccion/desprese" },
-      { label: "Beneficio",         href: "/dashboard/export-produccion/beneficio" },
+      { label: "Desprese",              href: "/dashboard/export-produccion/desprese" },
+      { label: "Sin Prod. en Proceso", href: "/dashboard/export-produccion/produccion-spp" },
+      { label: "Beneficio",            href: "/dashboard/export-produccion/beneficio" },
       { label: "Entrada Beneficio", href: "/dashboard/export-produccion/entrada-beneficio" },
       { label: "Salida Beneficio",  href: "/dashboard/export-produccion/salida-beneficio" },
       { label: "Entrada Desprese",  href: "/dashboard/export-produccion/entrada-desprese" },

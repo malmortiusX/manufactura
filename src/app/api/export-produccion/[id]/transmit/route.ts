@@ -112,7 +112,7 @@ function buildXML2(
     pA("70010401", 15) +           // f470_id_ccosto_movto
     pA("",    15) +                // f470_id_proyecto
     pA(comp.hijoUnidad,  4) +      // f470_id_unidad_medida
-    pQ(comp.cantidadPendiente, 15, 4) + // f470_cant_base  (20 chars)
+    pQ(comp.cantidadPendiente1, 15, 4) + // f470_cant_base  (20 chars)
     pQ(0,     15, 4) +             // f470_cant_2         (20 chars)
     pA("",   255) +                // f470_notas
     pA("",  2000)                  // f470_desc_varible
