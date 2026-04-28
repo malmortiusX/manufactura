@@ -80,13 +80,14 @@ interface TransmitResult {
 interface ProductoLote { codigo: string; lote: string; }
 
 interface LoteCreacionResult {
-  exitoso:  boolean;
-  omitidos: ProductoLote[];
-  nuevos:   ProductoLote[];
-  creados:  ProductoLote[];
-  errores:  ErpError[];
-  xmlLotes: string | null;
-  error?:   string;
+  exitoso:      boolean;
+  omitidos:     ProductoLote[];
+  nuevos:       ProductoLote[];
+  creados:      ProductoLote[];
+  errores:      ErpError[];
+  respuestaRaw: string;
+  xmlLotes:     string | null;
+  error?:       string;
 }
 
 // ── Utilidades ────────────────────────────────────────────────────────────
@@ -391,12 +392,15 @@ function OPGPanel({ titulo, num, result, accent, retrying, onReintentarOrden, on
 function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   const todoOmitidos = result.omitidos.length > 0 && result.nuevos.length === 0;
   const hayErrores   = !result.exitoso && result.nuevos.length > 0;
+  const [showRaw, setShowRaw] = useState(false);
+
   return (
     <div className={`rounded-xl border p-4 space-y-3 ${
       hayErrores   ? "border-amber-200 bg-amber-50" :
       todoOmitidos ? "border-slate-200 bg-slate-50" :
                      "border-emerald-200 bg-emerald-50"
     }`}>
+      {/* Encabezado con badges */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-xs font-semibold text-slate-700">Registro de Lotes</span>
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -414,8 +418,41 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
           )}
         </div>
       </div>
+
+      {/* Mensaje resumen */}
       {todoOmitidos && <p className="text-xs text-slate-500">Todos los lotes ya estaban registrados.</p>}
-      {result.exitoso && result.nuevos.length > 0 && <p className="text-xs text-emerald-700">Lotes creados exitosamente en ERP.</p>}
+      {result.exitoso && result.nuevos.length > 0 && (
+        <p className="text-xs text-emerald-700">Lotes creados exitosamente en ERP.</p>
+      )}
+
+      {/* Errores del ERP */}
+      {result.errores.length > 0 && (
+        <div className="space-y-1">
+          {result.errores.map((e, i) => (
+            <div key={i} className="text-xs bg-amber-100 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
+              <span className="font-semibold">Línea {e.nroLinea} · Nivel {e.nivel}</span>
+              {" — "}{e.detalle || e.valor}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Respuesta raw del ERP (desplegable) */}
+      {result.respuestaRaw && (
+        <div>
+          <button
+            onClick={() => setShowRaw(v => !v)}
+            className="text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            {showRaw ? "Ocultar respuesta ERP" : "Ver respuesta ERP"}
+          </button>
+          {showRaw && (
+            <pre className="mt-2 text-xs bg-slate-100 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all text-slate-600 max-h-48">
+              {result.respuestaRaw}
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -500,10 +537,10 @@ export default function DesPreseDetailPage() {
     setTransmitError(null);
 
     try {
-      // ── Paso 1: Crear/verificar lotes ────────────────────────────────────
+      // ── Paso 1: Crear/verificar lotes (productos principales + consumo) ──
       const uniqueLotes: ProductoLote[] = Array.from(
         new Map(
-          rows
+          [...rows, ...rowsConsumoSeleccionadas]
             .filter((r) => r.LOTE_PRODUCTO?.trim())
             .map((r): [string, ProductoLote] => [
               `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
@@ -794,24 +831,6 @@ export default function DesPreseDetailPage() {
             </div>
           </div>
 
-          {/* XMLs OPG1 */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider px-1">OPG1 — Productos filtrados</p>
-            <XmlBlock title="XML Lotes — Tipo 403"                    content={xmlLotes} />
-            <XmlBlock title="XML 1 — OPG1 Orden de Producción"        content={xml1} />
-            <XmlBlock title="XML 2 — OPG1 Consumo SPG"                content={tr?.xmls.xml2  || "// Se genera al transmitir"} />
-            <XmlBlock title="XML 3 — OPG1 Entrega EPG"                content={tr?.xmls.xml3  || "// Se genera al transmitir"} />
-          </div>
-
-          {/* XMLs OPG2 (solo si hay resultado) */}
-          {tr && tr.opg2Num > 0 && (
-            <div className="space-y-3">
-              <p className="text-xs font-semibold text-orange-500 uppercase tracking-wider px-1">OPG2 — Subproductos PI</p>
-              <XmlBlock title="XML 1b — OPG2 Orden de Producción (PI)" content={tr.xmls.xml1b} />
-              <XmlBlock title="XML 2b — OPG2 Consumo SPG"              content={tr.xmls.xml2b} />
-              <XmlBlock title="XML 3b — OPG2 Entrega EPG (PI)"         content={tr.xmls.xml3b} />
-            </div>
-          )}
         </>
       )}
 

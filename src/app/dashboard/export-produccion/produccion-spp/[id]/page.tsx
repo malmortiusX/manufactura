@@ -65,13 +65,14 @@ interface TransmitResult {
 interface ProductoLote { codigo: string; lote: string; }
 
 interface LoteCreacionResult {
-  exitoso:  boolean;
-  omitidos: ProductoLote[];
-  nuevos:   ProductoLote[];
-  creados:  ProductoLote[];
-  errores:  ErpError[];
-  xmlLotes: string | null;
-  error?:   string;
+  exitoso:      boolean;
+  omitidos:     ProductoLote[];
+  nuevos:       ProductoLote[];
+  creados:      ProductoLote[];
+  errores:      ErpError[];
+  respuestaRaw: string;
+  xmlLotes:     string | null;
+  error?:       string;
 }
 
 // ── Utilidades ────────────────────────────────────────────────────────────
@@ -369,6 +370,8 @@ function OPGPanel({ titulo, num, result, accent, retrying, onReintentarOrden, on
 function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   const todoOmitidos = result.omitidos.length > 0 && result.nuevos.length === 0;
   const hayErrores   = !result.exitoso && result.nuevos.length > 0;
+  const [showRaw, setShowRaw] = useState(false);
+
   return (
     <div className={`rounded-xl border p-4 space-y-3 ${
       hayErrores   ? "border-amber-200 bg-amber-50" :
@@ -393,7 +396,34 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
         </div>
       </div>
       {todoOmitidos && <p className="text-xs text-slate-500">Todos los lotes ya estaban registrados.</p>}
-      {result.exitoso && result.nuevos.length > 0 && <p className="text-xs text-emerald-700">Lotes creados exitosamente en ERP.</p>}
+      {result.exitoso && result.nuevos.length > 0 && (
+        <p className="text-xs text-emerald-700">Lotes creados exitosamente en ERP.</p>
+      )}
+      {result.errores.length > 0 && (
+        <div className="space-y-1">
+          {result.errores.map((e, i) => (
+            <div key={i} className="text-xs bg-amber-100 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">
+              <span className="font-semibold">Línea {e.nroLinea} · Nivel {e.nivel}</span>
+              {" — "}{e.detalle || e.valor}
+            </div>
+          ))}
+        </div>
+      )}
+      {result.respuestaRaw && (
+        <div>
+          <button
+            onClick={() => setShowRaw(v => !v)}
+            className="text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            {showRaw ? "Ocultar respuesta ERP" : "Ver respuesta ERP"}
+          </button>
+          {showRaw && (
+            <pre className="mt-2 text-xs bg-slate-100 border border-slate-200 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all text-slate-600 max-h-48">
+              {result.respuestaRaw}
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -700,12 +730,6 @@ export default function ProduccionSppDetailPage() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            <XmlBlock title="XML Lotes — Tipo 403"             content={xmlLotes} />
-            <XmlBlock title="XML 1 — OPG Orden de Producción"  content={xml1} />
-            <XmlBlock title="XML 2 — SPG Consumo"              content={tr?.xmls.xml2 || "// Se genera al transmitir"} />
-            <XmlBlock title="XML 3 — EPG Entrega"              content={tr?.xmls.xml3 || "// Se genera al transmitir"} />
-          </div>
         </>
       )}
 

@@ -150,11 +150,12 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      exitoso:  result.exitoso,
+      exitoso:      result.exitoso,
       omitidos,
       nuevos,
       creados,
-      errores:  result.errores,
+      errores:      result.errores,
+      respuestaRaw: result.respuestaRaw,
       xmlLotes,
     });
   } catch (err) {
