@@ -423,6 +423,8 @@ export default function ProduccionSppDetailPage() {
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
 
   const cargarDatos = useCallback(async () => {
+    setBache(null);
+    setRows([]);
     setLoading(true);
     setError(null);
     setTransmitResult(null);

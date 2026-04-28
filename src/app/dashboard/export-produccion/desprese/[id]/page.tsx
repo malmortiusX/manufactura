@@ -451,6 +451,9 @@ export default function DesPreseDetailPage() {
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
 
   const cargarDatos = useCallback(async () => {
+    setBache(null);
+    setRows([]);
+    setRowsConsumo([]);
     setLoading(true);
     setError(null);
     setTransmitResult(null);
