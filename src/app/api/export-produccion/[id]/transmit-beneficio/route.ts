@@ -47,29 +47,30 @@ function pQ(val: number, intLen: number, dec: number): string {
 interface PpItem { codigo: string; cantidad: number; unidad: string; lote: string; }
 
 function buildXML1b(
-  centroOperacion: string,
-  nombre:          string,
-  fecha:           string,
-  consecOpg2:      number,
-  ppItems:         PpItem[],
+  centroOperacion:     string,
+  nombre:              string,
+  fecha:               string,
+  consecOpg2:          number,
+  ppItems:             PpItem[],
   terceroPlanificador: string,
-  instalacion:     string,
-  bodegaItemPadre: string,
+  instalacion:         string,
+  bodegaItemPadre:     string,
+  tipoDoctoOrden:      string,
 ): string {
   const opening = "000000100000001001";
 
   const header =
     pN(2,   7) + pN(850, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) + pN(0, 1) +
-    pA(centroOperacion,      3) +
-    pA("OPG",                3) +
-    pN(consecOpg2,           8) +
-    pA(fecha,                8) +
+    pA(centroOperacion,  3) +
+    pA(tipoDoctoOrden,   3) +
+    pN(consecOpg2,       8) +
+    pA(fecha,            8) +
     pN(1,   1) + pN(0, 1) + pN(701, 3) +
     pA(terceroPlanificador, 15) +
-    pA("OPG",                3) +
+    pA(tipoDoctoOrden,   3) +
     pN(1,   8) +
-    pA(instalacion,          3) +
-    pA("002",                3) +   // clase_op = 002
+    pA(instalacion,      3) +
+    pA("002",            3) +   // clase_op = 002
     pA("",                  30) +
     pA("",                  30) +
     pA("",                  30) +
@@ -82,12 +83,12 @@ function buildXML1b(
 
   const productLines = ppItems.map((item, i) =>
     pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-    pA(centroOperacion,    3) +
-    pA("OPG",              3) +
-    pN(consecOpg2,         8) +
-    pN(i + 1,             10) +
-    pN(0,                  7) +
-    pA(item.codigo,       50) +
+    pA(centroOperacion, 3) +
+    pA(tipoDoctoOrden,  3) +
+    pN(consecOpg2,      8) +
+    pN(i + 1,          10) +
+    pN(0,               7) +
+    pA(item.codigo,    50) +
     pA("",                20) +
     pA("",                20) +
     pA("",                20) +
@@ -522,6 +523,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           filtro.terceroPlanificador?.trim() ?? "",
           filtro.instalacion?.trim()          ?? "",
           filtro.bodegaItemPadre?.trim()       ?? "",
+          filtro.tipoDoctoOrden?.trim()        ?? "OPG",
         );
         const log2 = await prisma.opgLog.create({
           data: {

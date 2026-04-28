@@ -17,14 +17,19 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const result = await signIn.email({ email, password });
+    try {
+      const result = await signIn.email({ email, password });
 
-    if (result.error) {
-      setError(result.error.message ?? "Credenciales inválidas");
+      if (result.error) {
+        setError(result.error.message ?? "Credenciales inválidas");
+        setLoading(false);
+      } else {
+        router.push("/dashboard");
+        router.refresh();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al conectar con el servidor");
       setLoading(false);
-    } else {
-      router.push("/dashboard");
-      router.refresh();
     }
   }
 

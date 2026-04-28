@@ -31,6 +31,7 @@ interface Filtro {
   terceroPlanificador: string | null;
   instalacion: string | null;
   bodegaItemPadre: string | null;
+  tipoDoctoOrden: string | null;
 }
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";
@@ -157,27 +158,27 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
 
   const header =
     pN(2,   7) + pN(850, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) + pN(0, 1) +
-    pA(filtro.centroOperacion,     3) +
-    pA("OPG",                      3) +
+    pA(filtro.centroOperacion,         3) +
+    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
     pN(consecOpg, 8) +
-    pA(fecha,                      8) +
+    pA(fecha,                          8) +
     pN(1,   1) + pN(0, 1) + pN(701, 3) +
-    pA(filtro.terceroPlanificador, 15) +
-    pA("OPG",                      3) +
+    pA(filtro.terceroPlanificador,    15) +
+    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
     pN(1,   8) +
-    pA(filtro.instalacion,         3) +
-    pA("002",                      3) +
-    pA("",                        30) + pA("", 30) + pA("", 30) +
-    pA(filtro.nombre,           2000) +
-    pA("",                         3) + pA("", 3) +
+    pA(filtro.instalacion,             3) +
+    pA("002",                          3) +
+    pA("",                            30) + pA("", 30) + pA("", 30) +
+    pA(filtro.nombre,               2000) +
+    pA("",                             3) + pA("", 3) +
     pN(0,   8);
 
   const productLines = rows.map((row, i) => {
     const bodega = pA(filtro.bodegaItemPadre ?? row.BODEGA, 5);
     return (
       pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-      pA(filtro.centroOperacion,  3) +
-      pA("OPG",                   3) +
+      pA(filtro.centroOperacion,         3) +
+      pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
       pN(consecOpg, 8) +
       pN(i + 1,                  10) +
       pN(0,      7) +

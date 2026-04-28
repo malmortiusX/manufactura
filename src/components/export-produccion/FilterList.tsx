@@ -17,7 +17,9 @@ export interface FilterSet {
   terceroPlanificador: string | null;
   instalacion: string | null;
   bodegaItemPadre: string | null;
+  tipoDoctoOrden: string | null;
   modulo: string | null;
+  productoProceso: string | null;
   bodegaConsumo: string | null;
   ubicacionConsumo: string | null;
   tipoDocumentoConsumo: string | null;
@@ -104,6 +106,8 @@ const emptyForm = {
   terceroPlanificador: "",
   instalacion: "",
   bodegaItemPadre: "",
+  tipoDoctoOrden: "",
+  productoProceso: "",
   bodegaConsumo: "",
   ubicacionConsumo: "",
   tipoDocumentoConsumo: "",
@@ -171,6 +175,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
       terceroPlanificador:    item.terceroPlanificador    ?? "",
       instalacion:            item.instalacion            ?? "",
       bodegaItemPadre:        item.bodegaItemPadre        ?? "",
+      tipoDoctoOrden:         item.tipoDoctoOrden         ?? "",
+      productoProceso:        item.productoProceso        ?? "",
       bodegaConsumo:          item.bodegaConsumo          ?? "",
       ubicacionConsumo:       item.ubicacionConsumo       ?? "",
       tipoDocumentoConsumo:   item.tipoDocumentoConsumo   ?? "",
@@ -425,6 +431,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-indigo-100">
             <Field label="Centro de Operación" name="centroOperacion" value={form.centroOperacion} onChange={handleChange} maxLength={3} placeholder="Ej: C01" />
+            <Field label="Tipo Documento" name="tipoDoctoOrden" value={form.tipoDoctoOrden} onChange={handleChange} maxLength={3} placeholder="Ej: OPG" />
             <Field label="Tercero Planificador" name="terceroPlanificador" value={form.terceroPlanificador} onChange={handleChange} maxLength={15} placeholder="Ej: PLANIF001" />
             <Field label="Instalación" name="instalacion" value={form.instalacion} onChange={handleChange} maxLength={3} placeholder="Ej: I01" />
             <Field label="Bodega Item Padre" name="bodegaItemPadre" value={form.bodegaItemPadre} onChange={handleChange} maxLength={5} placeholder="Ej: BO01" />
@@ -440,6 +447,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-amber-100">
+                <Field label="Producto en Proceso" name="productoProceso" value={form.productoProceso} onChange={handleChange} maxLength={50} placeholder="Ej: PI00001" />
                 <Field label="Bodega" name="bodegaConsumo" value={form.bodegaConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: BOD02" />
                 <Field label="Ubicación" name="ubicacionConsumo" value={form.ubicacionConsumo} onChange={handleChange} maxLength={10} placeholder="Ej: B-01" />
                 <Field label="Tipo Documento" name="tipoDocumentoConsumo" value={form.tipoDocumentoConsumo} onChange={handleChange} maxLength={3} placeholder="Ej: FAC" />

@@ -21,11 +21,6 @@ import {
 
 export type { ErpError, DocResult } from "@/lib/erp-soap";
 
-// Producto en proceso que genera OPG2
-const PP_CODIGOS = ["PI00001"];
-
-// Productos en proceso que llevan lote en el consumo (SPG) de OPG1
-const PP_CON_LOTE = ["PI00001"];
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
 const pN = (val: string | number | null | undefined, len: number) =>
@@ -47,29 +42,30 @@ function pQ(val: number, intLen: number, dec: number): string {
 interface PpItem { codigo: string; cantidad: number; unidad: string; lote: string; }
 
 function buildXML1b(
-  centroOperacion: string,
-  nombre:          string,
-  fecha:           string,
-  consecOpg2:      number,
-  ppItems:         PpItem[],
+  centroOperacion:     string,
+  nombre:              string,
+  fecha:               string,
+  consecOpg2:          number,
+  ppItems:             PpItem[],
   terceroPlanificador: string,
-  instalacion:     string,
-  bodegaItemPadre: string,
+  instalacion:         string,
+  bodegaItemPadre:     string,
+  tipoDoctoOrden:      string,
 ): string {
   const opening = "000000100000001001";
 
   const header =
     pN(2,   7) + pN(850, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) + pN(0, 1) +
-    pA(centroOperacion,      3) +
-    pA("OPG",                3) +
-    pN(consecOpg2,           8) +
-    pA(fecha,                8) +
+    pA(centroOperacion,  3) +
+    pA(tipoDoctoOrden,   3) +
+    pN(consecOpg2,       8) +
+    pA(fecha,            8) +
     pN(1,   1) + pN(0, 1) + pN(701, 3) +
     pA(terceroPlanificador, 15) +
-    pA("OPG",                3) +
+    pA(tipoDoctoOrden,   3) +
     pN(1,   8) +
-    pA(instalacion,          3) +
-    pA("004",                3) +   // clase_op = 004 (sin lista de materiales)
+    pA(instalacion,      3) +
+    pA("004",            3) +   // clase_op = 004 (sin lista de materiales)
     pA("",                  30) +
     pA("",                  30) +
     pA("",                  30) +
@@ -82,12 +78,12 @@ function buildXML1b(
 
   const productLines = ppItems.map((item, i) =>
     pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-    pA(centroOperacion,    3) +
-    pA("OPG",              3) +
-    pN(consecOpg2,         8) +
-    pN(i + 1,             10) +
-    pN(0,                  7) +
-    pA(item.codigo,       50) +
+    pA(centroOperacion, 3) +
+    pA(tipoDoctoOrden,  3) +
+    pN(consecOpg2,      8) +
+    pN(i + 1,          10) +
+    pN(0,               7) +
+    pA(item.codigo,    50) +
     pA("",                20) +
     pA("",                20) +
     pA("",                20) +
@@ -178,12 +174,13 @@ function buildXML2(
 //   f470_id_bodega → bodegaItemPadre del filtro (no la bodega del movimiento)
 //   f470_id_lote   → lote del producto consumido (LOTE_PRODUCTO de la fila)
 function buildXML2Consumo(
-  centroOperacion: string,
-  nombre:          string,
-  fecha:           string,
-  consecOpg:       number,
-  rows:            RowXml3[],
-  bodegaItemPadre: string,
+  centroOperacion:  string,
+  nombre:           string,
+  fecha:            string,
+  consecOpg:        number,
+  rows:             RowXml3[],
+  bodegaItemPadre:  string,
+  productoProceso:  string,
 ): string {
   const opening = "000000100000001001";
 
@@ -208,7 +205,7 @@ function buildXML2Consumo(
     pN(1,      8) +
     pN(i + 1, 10) +
     pN(0,      7) +
-    pA("PI00001",           50) +   // padreReferencia = producto PI
+    pA(productoProceso,     50) +   // padreReferencia = producto en proceso
     pA("",    20) + pA("",    20) + pA("",    20) +
     pN(0,     10) +
     pN(0,      7) +
@@ -314,16 +311,17 @@ function buildXML3(
 
 // ── XML3b — Entrega OPG2 (EPG con reglas de PI) ───────────────────────────
 // Diferencias respecto a buildXML3 (OPG1):
-//   f470_referencia_item        → siempre "PI00001" para todas las líneas
-//   f470_referencia_item_otros  → código real del producto; vacío si es PI00001
-//   f_nro_reg_item_padre        → 1 para todos excepto PI00001 que lleva 0
+//   f470_referencia_item        → siempre productoProceso para todas las líneas
+//   f470_referencia_item_otros  → código real del producto; vacío si es productoProceso
+//   f_nro_reg_item_padre        → 1 para todos excepto productoProceso que lleva 0
 function buildXML3b(
-  centroOperacion: string,
-  nombre:          string,
-  fecha:           string,
-  consecOpg:       number,
-  rows:            RowXml3[],
-  bodegaItemPadre: string | null | undefined,
+  centroOperacion:  string,
+  nombre:           string,
+  fecha:            string,
+  consecOpg:        number,
+  rows:             RowXml3[],
+  bodegaItemPadre:  string | null | undefined,
+  productoProceso:  string,
 ): string {
   const opening = "000000100000001001";
 
@@ -347,9 +345,9 @@ function buildXML3b(
 
   const productLines = rows.map((row, i) => {
     const bodega   = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
-    const esPI1    = row.CODIGO_PRODUCTO.trim() === "PI00001";
-    const itemOtro = esPI1 ? "" : row.CODIGO_PRODUCTO;   // f470_referencia_item_otros
-    const nroRegPadre = esPI1 ? 0 : 2;                   // f_nro_reg_item_padre
+    const esPI     = row.CODIGO_PRODUCTO.trim() === productoProceso;
+    const itemOtro = esPI ? "" : row.CODIGO_PRODUCTO;    // f470_referencia_item_otros
+    const nroRegPadre = esPI ? 0 : 2;                    // f_nro_reg_item_padre
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(2, 2) + pN(2, 2) + pN(1, 3) +
       pA(centroOperacion,   3) +
@@ -359,7 +357,7 @@ function buildXML3b(
       pA("OPG",             3) +
       pN(consecOpg,         8) +
       pN(0,      7) +
-      pA("PI00001",        50) +                          // f470_referencia_item
+      pA(productoProceso,  50) +                         // f470_referencia_item
       pA("",    20) + pA("",    20) + pA("",    20) +
       pN(0,      7) +
       pA(itemOtro,         50) +                          // f470_referencia_item_otros
@@ -471,6 +469,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const fecha = fechaYMD(filtro.fecha);
     const co    = filtro.centroOperacion?.trim() ?? "";
     const lote1 = rows[0]?.LOTE_PRODUCTO ?? "";
+
+    const ppCodigo   = filtro.productoProceso?.trim() ?? "";
+    const PP_CODIGOS = ppCodigo ? [ppCodigo] : [];
+    const PP_CON_LOTE = ppCodigo ? [ppCodigo] : [];
 
     // ── Crear log inicial OPG1 ─────────────────────────────────────────────
     const log1 = await prisma.opgLog.create({
@@ -585,6 +587,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           filtro.terceroPlanificador?.trim() ?? "",
           filtro.instalacion?.trim()          ?? "",
           filtro.bodegaItemPadre?.trim()       ?? "",
+          filtro.tipoDoctoOrden?.trim()        ?? "OPG",
         );
         const log2 = await prisma.opgLog.create({
           data: {
@@ -611,6 +614,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 co, filtro.nombre, fecha, consecOpg2,
                 rowsConsumo,
                 filtro.bodegaItemPadre?.trim() ?? "",
+                ppCodigo,
               );
             } else {
               const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
@@ -630,7 +634,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 BODEGA: filtro.bodegaItemPadre?.trim() ?? "",
                 UNIDAD_PRODUCTO: p.unidad, KIL: p.cantidad, UND: 0,
               }));
-              xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre);
+              xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, ppCodigo);
               await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
               entregaOpg2Result = await callSoap(xml3b);
             } catch (e) { entregaOpg2Result = mkErr(e); }
