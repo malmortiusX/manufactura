@@ -136,8 +136,25 @@ model OpgLog {
   // Control de reintentos
   intentos  Int @default(0)
 
+  desmarques BacheDesmarque[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ── Registro de desmarques de baches ─────────────────────────────────────────
+// Auditoría de cada vez que se desmarca un bache: quién, cuándo y por qué.
+model BacheDesmarque {
+  id            Int      @id @default(autoincrement())
+  logId         Int
+  log           OpgLog   @relation(fields: [logId], references: [id], onDelete: Cascade)
+  numeroBache   String   @db.VarChar(20)
+  observacion   String   @db.NVarChar(Max)
+  usuarioId     String   @db.VarChar(255)  // ID del usuario (Better Auth)
+  usuarioEmail  String   @db.VarChar(255)
+  usuarioNombre String?  @db.VarChar(255)
+  rowsAfectados Int      @default(0)
+  createdAt     DateTime @default(now())
 }
 
 // ── Registro de lotes creados en ERP ─────────────────────────────────────

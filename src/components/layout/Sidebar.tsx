@@ -72,8 +72,9 @@ const exportGroups = [
       { label: "Beneficio",            href: "/dashboard/export-produccion/beneficio" },
       { label: "Entrada Beneficio", href: "/dashboard/export-produccion/entrada-beneficio" },
       { label: "Salida Beneficio",  href: "/dashboard/export-produccion/salida-beneficio" },
-      { label: "Entrada Desprese",  href: "/dashboard/export-produccion/entrada-desprese" },
-      { label: "Salida Desprese",   href: "/dashboard/export-produccion/salida-desprese" },
+      { label: "Entrada Desprese",     href: "/dashboard/export-produccion/entrada-desprese" },
+      { label: "Salida Desprese",      href: "/dashboard/export-produccion/salida-desprese" },
+      { label: "Historial de baches",  href: "/dashboard/export-produccion/historial-baches" },
     ],
   },
 ];

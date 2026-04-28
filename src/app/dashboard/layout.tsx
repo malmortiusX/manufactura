@@ -17,6 +17,7 @@ const pageTitles: Record<string, string> = {
   "/dashboard/export-produccion/beneficio":              "Beneficio",
   "/dashboard/export-produccion/desprese":               "Desprese",
   "/dashboard/export-produccion/produccion-spp":         "Sin Prod. en Proceso",
+  "/dashboard/export-produccion/historial-baches":       "Historial de baches",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
