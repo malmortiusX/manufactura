@@ -183,21 +183,3 @@ model Employee {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
-
-// ── Tablas externas — Prisma las reconoce pero NO las administra ──────────────
-// @@ignore excluye estos modelos de db push, db pull, migrate y Prisma Client.
-// Esto evita que cualquier comando de Prisma las borre o modifique.
-
-model Mvdcto {
-  TIPODCTO String @id @db.VarChar(3)
-
-  @@map("MVDCTO")
-  @@ignore
-}
-
-model Dcto {
-  TIPODCTO String @id @db.VarChar(3)
-
-  @@map("DCTO")
-  @@ignore
-}
