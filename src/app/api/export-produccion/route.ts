@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
         ubicacionConsumo:       body.ubicacionConsumo       || null,
         tipoDocumentoConsumo:   body.tipoDocumentoConsumo   || null,
         tipoMovimientoConsumo:  body.tipoMovimientoConsumo  || null,
+        productosEnProceso:     body.productosEnProceso     || null,
+        productosSinLote:       body.productosSinLote       || null,
       },
     });
     return NextResponse.json(registro, { status: 201 });

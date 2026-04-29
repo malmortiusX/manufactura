@@ -24,6 +24,8 @@ export interface FilterSet {
   ubicacionConsumo: string | null;
   tipoDocumentoConsumo: string | null;
   tipoMovimientoConsumo: string | null;
+  productosEnProceso: string | null;
+  productosSinLote: string | null;
 }
 
 export type ModuloKey =
@@ -112,6 +114,8 @@ const emptyForm = {
   ubicacionConsumo: "",
   tipoDocumentoConsumo: "",
   tipoMovimientoConsumo: "",
+  productosEnProceso: "",
+  productosSinLote: "",
 };
 
 export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
@@ -181,6 +185,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
       ubicacionConsumo:       item.ubicacionConsumo       ?? "",
       tipoDocumentoConsumo:   item.tipoDocumentoConsumo   ?? "",
       tipoMovimientoConsumo:  item.tipoMovimientoConsumo  ?? "",
+      productosEnProceso:     item.productosEnProceso     ?? "",
+      productosSinLote:       item.productosSinLote       ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -421,6 +427,25 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
             </div>
           </div>
 
+          {modulo === "desprese" && (
+            <>
+              <div className="my-6 border-t border-slate-100" />
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  Consumo
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-amber-100">
+                <Field label="Producto en Proceso" name="productoProceso" value={form.productoProceso} onChange={handleChange} maxLength={50} placeholder="Ej: PI00001" />
+                <Field label="Bodega" name="bodegaConsumo" value={form.bodegaConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: BOD02" />
+                <Field label="Ubicación" name="ubicacionConsumo" value={form.ubicacionConsumo} onChange={handleChange} maxLength={10} placeholder="Ej: B-01" />
+                <Field label="Tipo Documento" name="tipoDocumentoConsumo" value={form.tipoDocumentoConsumo} onChange={handleChange} maxLength={3} placeholder="Ej: FAC" />
+                <Field label="Tipo Movimiento" name="tipoMovimientoConsumo" value={form.tipoMovimientoConsumo} onChange={handleChange} maxLength={5} placeholder="Ej: SAL" />
+              </div>
+            </>
+          )}
+
           <div className="my-6 border-t border-slate-100" />
 
           <div className="mb-4">
@@ -437,21 +462,18 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
             <Field label="Bodega Item Padre" name="bodegaItemPadre" value={form.bodegaItemPadre} onChange={handleChange} maxLength={5} placeholder="Ej: BO01" />
           </div>
 
-          {modulo === "desprese" && (
+          {modulo === "beneficio" && (
             <>
               <div className="my-6 border-t border-slate-100" />
               <div className="mb-4">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-                  Consumo
+                  <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+                  Configuración productos
                 </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-amber-100">
-                <Field label="Producto en Proceso" name="productoProceso" value={form.productoProceso} onChange={handleChange} maxLength={50} placeholder="Ej: PI00001" />
-                <Field label="Bodega" name="bodegaConsumo" value={form.bodegaConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: BOD02" />
-                <Field label="Ubicación" name="ubicacionConsumo" value={form.ubicacionConsumo} onChange={handleChange} maxLength={10} placeholder="Ej: B-01" />
-                <Field label="Tipo Documento" name="tipoDocumentoConsumo" value={form.tipoDocumentoConsumo} onChange={handleChange} maxLength={3} placeholder="Ej: FAC" />
-                <Field label="Tipo Movimiento" name="tipoMovimientoConsumo" value={form.tipoMovimientoConsumo} onChange={handleChange} maxLength={5} placeholder="Ej: SAL" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pl-4 border-l-2 border-rose-100">
+                <Field label="Productos en proceso" name="productosEnProceso" value={form.productosEnProceso} onChange={handleChange} maxLength={500} placeholder="Ej: PI00001, PI00002" />
+                <Field label="Productos sin lote" name="productosSinLote" value={form.productosSinLote} onChange={handleChange} maxLength={500} placeholder="Ej: PR00001, PR00002" />
               </div>
             </>
           )}

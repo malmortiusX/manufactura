@@ -90,6 +90,9 @@ model ExportProduccion {
   ubicacionConsumo        String?  @db.Char(10)
   tipoDocumentoConsumo    String?  @db.Char(3)
   tipoMovimientoConsumo   String?  @db.Char(5)
+  // Configuración productos (beneficio)
+  productosEnProceso      String?  @db.VarChar(500)
+  productosSinLote        String?  @db.VarChar(500)
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
