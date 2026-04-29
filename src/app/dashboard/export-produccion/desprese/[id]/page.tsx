@@ -509,21 +509,24 @@ function XmlsPreview({ xmlLotes, xml1 }: { xmlLotes: string; xml1: string }) {
 
 // ── Panel colapsable de XMLs generados tras transmisión ───────────────────
 function XmlsGenerados({
-  xmls, opg1Num, opg2Num,
+  xmls, opg1Num, opg2Num, xmlsPreview,
 }: {
   xmls: { xml1b: string; xml2b: string; xml3b: string; xml2: string; xml3: string };
   opg1Num: number;
   opg2Num: number;
+  xmlsPreview: { xmlLotes: string; xml1: string } | null;
 }) {
   const [open, setOpen] = useState(false);
 
   const tieneOpg2 = opg2Num > 0;
   const items = [
-    ...(tieneOpg2 && xmls.xml1b ? [{ label: `OPG2 #${opg2Num} — Orden (850/851)`,   content: xmls.xml1b }] : []),
-    ...(tieneOpg2 && xmls.xml2b ? [{ label: `OPG2 #${opg2Num} — Consumo SPG (470)`, content: xmls.xml2b }] : []),
-    ...(tieneOpg2 && xmls.xml3b ? [{ label: `OPG2 #${opg2Num} — Entrega EPG (470)`, content: xmls.xml3b }] : []),
-    ...(xmls.xml2 ? [{ label: `OPG1 #${opg1Num} — Consumo SPG (470)`, content: xmls.xml2 }] : []),
-    ...(xmls.xml3 ? [{ label: `OPG1 #${opg1Num} — Entrega EPG (470)`, content: xmls.xml3 }] : []),
+    ...(xmlsPreview?.xmlLotes ? [{ label: "XML Lotes (tipo 403)",                          content: xmlsPreview.xmlLotes }] : []),
+    ...(xmlsPreview?.xml1     ? [{ label: `OPG1 #${opg1Num} — Orden de Producción`,        content: xmlsPreview.xml1     }] : []),
+    ...(tieneOpg2 && xmls.xml1b ? [{ label: `OPG2 #${opg2Num} — Orden (850/851)`,          content: xmls.xml1b }] : []),
+    ...(tieneOpg2 && xmls.xml2b ? [{ label: `OPG2 #${opg2Num} — Consumo SPG (470)`,        content: xmls.xml2b }] : []),
+    ...(tieneOpg2 && xmls.xml3b ? [{ label: `OPG2 #${opg2Num} — Entrega EPG (470)`,        content: xmls.xml3b }] : []),
+    ...(xmls.xml2 ? [{ label: `OPG1 #${opg1Num} — Consumo SPG (470)`,                      content: xmls.xml2  }] : []),
+    ...(xmls.xml3 ? [{ label: `OPG1 #${opg1Num} — Entrega EPG (470)`,                      content: xmls.xml3  }] : []),
   ];
 
   if (items.length === 0) return null;
@@ -594,6 +597,7 @@ export default function DesPreseDetailPage() {
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
+  const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
 
   const cargarDatos = useCallback(async () => {
     // Guard: evita la doble ejecución de React Strict Mode (mount→unmount→remount).
@@ -610,6 +614,7 @@ export default function DesPreseDetailPage() {
     setTransmitResult(null);
     setTransmitError(null);
     setLotesResult(null);
+    setXmlsPreview(null);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/results`, { method: "POST" });
       const text = await res.text();
@@ -636,8 +641,6 @@ export default function DesPreseDetailPage() {
   const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
-  const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
-  const xml1     = filtro ? buildXML1(filtro, rowsOpg1, consecOpg1) : "";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -656,10 +659,19 @@ export default function DesPreseDetailPage() {
       // ── Paso 1: Crear/verificar lotes (productos principales + consumo) ──
       const loteJul = loteJuliano(fechaYMD(filtro.fecha));
       const uniqueLotes: ProductoLote[] = Array.from(new Map([
+        // Lotes Julian — para la orden OPG1 (850/851)
         ...rowsOpg1.map((r): [string, ProductoLote] => [
-          r.CODIGO_PRODUCTO.trim(),
+          `${r.CODIGO_PRODUCTO.trim()}|${loteJul}`,
           { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
         ]),
+        // Lotes originales de BD — para la entrega EPG OPG1
+        ...rows
+          .filter((r) => r.LOTE_PRODUCTO?.trim())
+          .map((r): [string, ProductoLote] => [
+            `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
+            { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
+          ]),
+        // Lotes de consumo — para el SPG OPG2
         ...rowsConsumoSeleccionadas
           .filter((r) => r.LOTE_PRODUCTO?.trim())
           .map((r): [string, ProductoLote] => [
@@ -668,6 +680,7 @@ export default function DesPreseDetailPage() {
           ]),
       ]).values());
 
+      let xmlLotesEnviado = "// Sin lotes — no se enviará XML de lotes";
       if (uniqueLotes.length > 0) {
         const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
           method:  "POST",
@@ -679,7 +692,9 @@ export default function DesPreseDetailPage() {
         const lotesData: LoteCreacionResult = JSON.parse(lotesText);
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
         setLotesResult(lotesData);
-        // No se detiene aunque falle — los lotes pueden ya existir en ERP
+        // Usar el XML exacto que el servidor construyó y envió al ERP.
+        // xmlLotes es null cuando todos los lotes ya existían en LoteCreado.
+        xmlLotesEnviado = lotesData.xmlLotes ?? "// Todos los lotes ya existían — no se envió XML";
       }
 
       // ── Paso 2: Obtener consecutivo OPG1 ────────────────────────────────
@@ -691,8 +706,9 @@ export default function DesPreseDetailPage() {
       const nuevoConsec1: number = seqData.consecOpg;
       setConsecOpg1(nuevoConsec1);
 
-      // ── Paso 3: Transmitir ────────────────────────────────────────────────
+      // ── Paso 3: Construir XMLs y transmitir ──────────────────────────────
       const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1);
+      setXmlsPreview({ xmlLotes: xmlLotesEnviado, xml1: xml1Final });
 
       const lotesPorProducto: Record<string, string> = {};
       rowsOpg1.forEach((r) => {
@@ -929,7 +945,7 @@ export default function DesPreseDetailPage() {
           </div>
 
           {/* XMLs generados en la transmisión */}
-          <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} opg2Num={tr.opg2Num} />
+          <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} opg2Num={tr.opg2Num} xmlsPreview={xmlsPreview} />
         </div>
       )}
 
@@ -951,10 +967,6 @@ export default function DesPreseDetailPage() {
             </div>
           </div>
 
-          {/* XMLs previos a la transmisión */}
-          {rows.length > 0 && (
-            <XmlsPreview xmlLotes={xmlLotes} xml1={xml1} />
-          )}
         </>
       )}
 

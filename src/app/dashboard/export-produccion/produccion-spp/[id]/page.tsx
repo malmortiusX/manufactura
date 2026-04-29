@@ -444,48 +444,20 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
-// ── Panel colapsable XMLs de previsualización ─────────────────────────────
-function XmlsPreview({ xmlLotes, xml1 }: { xmlLotes: string; xml1: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-          </svg>
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            XMLs de previsualización
-          </span>
-        </div>
-        <svg className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="p-5 space-y-3">
-          <XmlBlock title="XML Lotes (tipo 403)" content={xmlLotes} />
-          <XmlBlock title="XML OPG1 — Orden de Producción" content={xml1} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Panel colapsable XMLs generados tras transmisión ──────────────────────
+// ── Panel colapsable con todos los XMLs de la transmisión ────────────────
 function XmlsGenerados({
-  xmls, opg1Num,
+  xmls, opg1Num, xmlsPreview,
 }: {
   xmls: { xml2: string; xml3: string };
   opg1Num: number;
+  xmlsPreview: { xmlLotes: string; xml1: string } | null;
 }) {
   const [open, setOpen] = useState(false);
   const items = [
-    ...(xmls.xml2 ? [{ label: `OPG #${opg1Num} — Consumo SPG (470)`, content: xmls.xml2 }] : []),
-    ...(xmls.xml3 ? [{ label: `OPG #${opg1Num} — Entrega EPG (470)`, content: xmls.xml3 }] : []),
+    ...(xmlsPreview?.xmlLotes ? [{ label: "XML Lotes (tipo 403)",                       content: xmlsPreview.xmlLotes }] : []),
+    ...(xmlsPreview?.xml1     ? [{ label: `OPG #${opg1Num} — Orden de Producción`,      content: xmlsPreview.xml1     }] : []),
+    ...(xmls.xml2             ? [{ label: `OPG #${opg1Num} — Consumo SPG (470)`,        content: xmls.xml2            }] : []),
+    ...(xmls.xml3             ? [{ label: `OPG #${opg1Num} — Entrega EPG (470)`,        content: xmls.xml3            }] : []),
   ];
   if (items.length === 0) return null;
   return (
@@ -544,6 +516,7 @@ export default function ProduccionSppDetailPage() {
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
+  const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
 
   const cargarDatos = useCallback(async () => {
     if (_cargando.has(id)) return;
@@ -557,6 +530,7 @@ export default function ProduccionSppDetailPage() {
     setTransmitResult(null);
     setTransmitError(null);
     setLotesResult(null);
+    setXmlsPreview(null);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/results`, { method: "POST" });
       const text = await res.text();
@@ -580,9 +554,6 @@ export default function ProduccionSppDetailPage() {
   const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
-  const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
-  const xml1     = filtro ? buildXML1(filtro, rowsOpg1, consecOpg1) : "";
-
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
     if (esReintento) setRetrying(true);
@@ -596,15 +567,22 @@ export default function ProduccionSppDetailPage() {
     try {
       // ── Paso 1: Crear/verificar lotes ───────────────────────────────────
       const loteJul = loteJuliano(fechaYMD(filtro.fecha));
-      const uniqueLotes: ProductoLote[] = Array.from(
-        new Map(
-          rowsOpg1.map((r): [string, ProductoLote] => [
-            r.CODIGO_PRODUCTO.trim(),
-            { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
-          ])
-        ).values()
-      );
+      const uniqueLotes: ProductoLote[] = Array.from(new Map([
+        // Lotes Julian — para la orden OPG1 (850/851)
+        ...rowsOpg1.map((r): [string, ProductoLote] => [
+          `${r.CODIGO_PRODUCTO.trim()}|${loteJul}`,
+          { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
+        ]),
+        // Lotes originales de BD — para la entrega EPG
+        ...rows
+          .filter((r) => r.LOTE_PRODUCTO?.trim())
+          .map((r): [string, ProductoLote] => [
+            `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
+            { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
+          ]),
+      ]).values());
 
+      let xmlLotesEnviado = "// Sin lotes — no se enviará XML de lotes";
       if (uniqueLotes.length > 0) {
         const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
           method:  "POST",
@@ -616,6 +594,9 @@ export default function ProduccionSppDetailPage() {
         const lotesData: LoteCreacionResult = JSON.parse(lotesText);
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
         setLotesResult(lotesData);
+        // Usar el XML exacto que el servidor construyó y envió al ERP.
+        // xmlLotes es null cuando todos los lotes ya existían en LoteCreado.
+        xmlLotesEnviado = lotesData.xmlLotes ?? "// Todos los lotes ya existían — no se envió XML";
       }
 
       // ── Paso 2: Obtener consecutivo OPG1 ────────────────────────────────
@@ -627,8 +608,9 @@ export default function ProduccionSppDetailPage() {
       const nuevoConsec1: number = seqData.consecOpg;
       setConsecOpg1(nuevoConsec1);
 
-      // ── Paso 3: Transmitir ───────────────────────────────────────────────
+      // ── Paso 3: Construir XMLs y transmitir ─────────────────────────────
       const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1);
+      setXmlsPreview({ xmlLotes: xmlLotesEnviado, xml1: xml1Final });
 
       const lotesPorProducto: Record<string, string> = {};
       rowsOpg1.forEach((r) => {
@@ -807,10 +789,8 @@ export default function ProduccionSppDetailPage() {
             }
           />
 
-          {/* XMLs generados */}
-          {(tr.xmls.xml2 || tr.xmls.xml3) && (
-            <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} />
-          )}
+          {/* XMLs de la transmisión */}
+          <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} xmlsPreview={xmlsPreview} />
         </div>
       )}
 
@@ -832,9 +812,6 @@ export default function ProduccionSppDetailPage() {
             </div>
           </div>
 
-          {rows.length > 0 && (
-            <XmlsPreview xmlLotes={xmlLotes} xml1={xml1} />
-          )}
         </>
       )}
 

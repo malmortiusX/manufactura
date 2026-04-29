@@ -132,13 +132,29 @@ export async function POST(req: Request) {
     const xmlLotes = buildXMLLotes(nuevos, fecha);
     const result   = await callSoap(xmlLotes);
 
-    // ── 4. Si fue exitoso, persistir los lotes creados ────────────────────
+    // ── 4. Persistir lotes ────────────────────────────────────────────────────
+    // En el XML los productos van en líneas i+2 (base 0), por lo que
+    // nuevos[nroLinea - 2] identifica el producto exacto de cada error.
+    const LOTE_YA_EXISTE = "el lote que desea adicionar ya existe";
+
+    // Productos cuyo error es "ya existe" → están en ERP, los registramos.
+    const yaExistenEnErp: ProductoLote[] = result.errores
+      .filter((e) => e.detalle.toLowerCase().includes(LOTE_YA_EXISTE))
+      .map((e) => nuevos[e.nroLinea - 2])
+      .filter((p): p is ProductoLote => p !== undefined);
+
+    // Errores reales: los que NO son "ya existe".
+    const erroresReales = result.errores.filter(
+      (e) => !e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
+    );
+
+    // Persistir: los creados por ERP (exitoso) + los que ya existían en ERP.
+    const aPersistir = result.exitoso ? nuevos : yaExistenEnErp;
+
     let creados: ProductoLote[] = [];
-    if (result.exitoso) {
-      // createMany con skipDuplicates no está soportado en SQL Server;
-      // se usa upsert individual para cada lote (idempotente ante race conditions).
+    if (aPersistir.length > 0) {
       await Promise.all(
-        nuevos.map((p) =>
+        aPersistir.map((p) =>
           prisma.loteCreado.upsert({
             where:  { codigoProducto_lote: { codigoProducto: p.codigo, lote: p.lote } },
             create: { codigoProducto: p.codigo, lote: p.lote },
@@ -146,15 +162,15 @@ export async function POST(req: Request) {
           })
         )
       );
-      creados = nuevos;
+      creados = aPersistir;
     }
 
     return NextResponse.json({
-      exitoso:      result.exitoso,
+      exitoso:      result.exitoso || erroresReales.length === 0,
       omitidos,
       nuevos,
       creados,
-      errores:      result.errores,
+      errores:      erroresReales,
       respuestaRaw: result.respuestaRaw,
       xmlLotes,
     });
