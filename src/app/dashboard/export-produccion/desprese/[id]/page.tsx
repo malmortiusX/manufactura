@@ -77,6 +77,14 @@ interface TransmitResult {
   };
 }
 
+interface RowOpg1 {
+  UNIDAD_PRODUCTO: string;
+  CODIGO_PRODUCTO: string;
+  bache:          number;
+  KIL:            number;
+  UND:            number;
+}
+
 interface ProductoLote { codigo: string; lote: string; }
 
 interface LoteCreacionResult {
@@ -99,6 +107,16 @@ const pA = (val: string | null | undefined, len: number) =>
 
 function fechaYMD(raw: string): string {
   return raw.split("T")[0].replace(/-/g, "");
+}
+
+function loteJuliano(fecha: string): string {
+  const y      = parseInt(fecha.slice(0, 4), 10);
+  const m      = parseInt(fecha.slice(4, 6), 10);
+  const d      = parseInt(fecha.slice(6, 8), 10);
+  const inicio = new Date(y, 0, 1);
+  const actual = new Date(y, m - 1, d);
+  const dia    = Math.round((actual.getTime() - inicio.getTime()) / 86_400_000) + 1;
+  return String(dia).padStart(3, "0") + String(y).slice(-2);
 }
 
 function pQ(val: number, intLen: number, dec: number): string {
@@ -153,8 +171,9 @@ function buildXMLLotes(rows: ProductRow[], fecha: string): string {
 }
 
 // ── XML1 — OPG1 (clase_op=002) ────────────────────────────────────────────
-function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
+function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number): string {
   const fecha   = fechaYMD(filtro.fecha);
+  const lote    = loteJuliano(fecha);
   const opening = "000000100000001001";
 
   const header =
@@ -165,8 +184,8 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pA(fecha,                          8) +
     pN(1,   1) + pN(0, 1) + pN(701, 3) +
     pA(filtro.terceroPlanificador,    15) +
-    pA("",                             3) +   // f850_id_tipo_docto_op_padre — vacío en OPG1
-    pN(0,   8) +                              // f850_consec_docto_op_padre  — vacío en OPG1
+    pA("",                             3) +
+    pN(0,   8) +
     pA(filtro.instalacion,             3) +
     pA("002",                          3) +
     pA("",                            30) + pA("", 30) + pA("", 30) +
@@ -174,32 +193,29 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pA("",                             3) + pA("", 3) +
     pN(0,   8);
 
-  const productLines = rows.map((row, i) => {
-    const bodega = pA(filtro.bodegaItemPadre ?? row.BODEGA, 5);
-    return (
-      pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-      pA(filtro.centroOperacion,         3) +
-      pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
-      pN(consecOpg, 8) +
-      pN(i + 1,                  10) +
-      pN(0,      7) +
-      pA(row.CODIGO_PRODUCTO,    50) +
-      pA("",    20) + pA("", 20) + pA("", 20) +
-      pA(row.UNIDAD_PRODUCTO,     4) +
-      pN(100,    8) +
-      pQ(Number(row.KIL), 15, 4) +
-      pA(fecha,                   8) +
-      pA(fecha,                   8) +
-      pA("0001",                  4) +
-      pA("",                      5) +
-      pA("",                      4) +
-      pA(row.LOTE_PRODUCTO,      15) +
-      pA("",                   2000) +
-      bodega
-    );
-  });
+  const productLines = rowsOpg1.map((row, i) =>
+    pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
+    pA(filtro.centroOperacion,         3) +
+    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
+    pN(consecOpg, 8) +
+    pN(i + 1,                  10) +
+    pN(0,      7) +
+    pA(row.CODIGO_PRODUCTO,    50) +
+    pA("",    20) + pA("", 20) + pA("", 20) +
+    pA(row.UNIDAD_PRODUCTO,     4) +
+    pN(100,    8) +
+    pQ(Number(row.KIL), 15, 4) +
+    pA(fecha,                   8) +
+    pA(fecha,                   8) +
+    pA("0001",                  4) +
+    pA("",                      5) +
+    pA("",                      4) +
+    pA(lote,                   15) +
+    pA("",                   2000) +
+    pA(filtro.bodegaItemPadre ?? "", 5)
+  );
 
-  const closing = pN(rows.length + 3, 7) + "9999" + "00" + "01" + "001";
+  const closing = pN(rowsOpg1.length + 3, 7) + "9999" + "00" + "01" + "001";
   return [opening, header, ...productLines, closing].join("\n");
 }
 
@@ -457,9 +473,100 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
+// ── Panel colapsable de XMLs previos a la transmisión ────────────────────
+function XmlsPreview({ xmlLotes, xml1 }: { xmlLotes: string; xml1: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            XMLs de previsualización
+          </span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="p-5 space-y-3">
+          <XmlBlock title="XML Lotes (tipo 403)" content={xmlLotes} />
+          <XmlBlock title="XML OPG1 — Orden de Producción" content={xml1} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Panel colapsable de XMLs generados tras transmisión ───────────────────
+function XmlsGenerados({
+  xmls, opg1Num, opg2Num,
+}: {
+  xmls: { xml1b: string; xml2b: string; xml3b: string; xml2: string; xml3: string };
+  opg1Num: number;
+  opg2Num: number;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const tieneOpg2 = opg2Num > 0;
+  const items = [
+    ...(tieneOpg2 && xmls.xml1b ? [{ label: `OPG2 #${opg2Num} — Orden (850/851)`,   content: xmls.xml1b }] : []),
+    ...(tieneOpg2 && xmls.xml2b ? [{ label: `OPG2 #${opg2Num} — Consumo SPG (470)`, content: xmls.xml2b }] : []),
+    ...(tieneOpg2 && xmls.xml3b ? [{ label: `OPG2 #${opg2Num} — Entrega EPG (470)`, content: xmls.xml3b }] : []),
+    ...(xmls.xml2 ? [{ label: `OPG1 #${opg1Num} — Consumo SPG (470)`, content: xmls.xml2 }] : []),
+    ...(xmls.xml3 ? [{ label: `OPG1 #${opg1Num} — Entrega EPG (470)`, content: xmls.xml3 }] : []),
+  ];
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            XMLs transmitidos ({items.length})
+          </span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="p-5 space-y-3">
+          {items.map(({ label, content }) => (
+            <XmlBlock key={label} title={label} content={content} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Utilidad clave de fila consumo ────────────────────────────────────────
 const rowKey = (r: ProductRow) =>
   `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO ?? ""}|${r.BODEGA}|${r.UBICACION ?? ""}`;
+
+// Guard contra la doble ejecución de useEffect en React Strict Mode.
+// Al ser un Set de módulo persiste entre el ciclo mount→unmount→remount.
+const _cargando = new Set<string>();
 
 // ── Página principal ───────────────────────────────────────────────────────
 const fmtNum = (n: number) =>
@@ -474,6 +581,7 @@ export default function DesPreseDetailPage() {
 
   const [filtro, setFiltro]   = useState<Filtro | null>(null);
   const [rows, setRows]       = useState<ProductRow[]>([]);
+  const [rowsOpg1, setRowsOpg1] = useState<RowOpg1[]>([]);
   const [rowsConsumo, setRowsConsumo]                   = useState<ProductRow[]>([]);
   const [selectedConsumoIdx, setSelectedConsumoIdx]     = useState<Set<number>>(new Set());
   const [bache, setBache]     = useState<number | null>(null);
@@ -488,9 +596,15 @@ export default function DesPreseDetailPage() {
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
 
   const cargarDatos = useCallback(async () => {
+    // Guard: evita la doble ejecución de React Strict Mode (mount→unmount→remount).
+    // El Set vive a nivel de módulo y persiste entre ciclos de montaje del mismo id.
+    if (_cargando.has(id)) return;
+    _cargando.add(id);
+
     setBache(null);
     setRows([]);
     setRowsConsumo([]);
+    setRowsOpg1([]);
     setLoading(true);
     setError(null);
     setTransmitResult(null);
@@ -505,13 +619,15 @@ export default function DesPreseDetailPage() {
       setFiltro(data.filtro);
       setBache(data.bache);
       setRows(data.rows);
+      setRowsOpg1(data.rowsOpg1 ?? []);
       const consumo: ProductRow[] = data.rowsConsumo ?? [];
       setRowsConsumo(consumo);
-      setSelectedConsumoIdx(new Set(consumo.map((_, i) => i)));
+      setSelectedConsumoIdx(new Set());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
+      _cargando.delete(id);
     }
   }, [id]);
 
@@ -521,7 +637,7 @@ export default function DesPreseDetailPage() {
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
   const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
-  const xml1     = filtro ? buildXML1(filtro, rows, consecOpg1) : "";
+  const xml1     = filtro ? buildXML1(filtro, rowsOpg1, consecOpg1) : "";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -538,16 +654,19 @@ export default function DesPreseDetailPage() {
 
     try {
       // ── Paso 1: Crear/verificar lotes (productos principales + consumo) ──
-      const uniqueLotes: ProductoLote[] = Array.from(
-        new Map(
-          [...rows, ...rowsConsumoSeleccionadas]
-            .filter((r) => r.LOTE_PRODUCTO?.trim())
-            .map((r): [string, ProductoLote] => [
-              `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
-              { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
-            ])
-        ).values()
-      );
+      const loteJul = loteJuliano(fechaYMD(filtro.fecha));
+      const uniqueLotes: ProductoLote[] = Array.from(new Map([
+        ...rowsOpg1.map((r): [string, ProductoLote] => [
+          r.CODIGO_PRODUCTO.trim(),
+          { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
+        ]),
+        ...rowsConsumoSeleccionadas
+          .filter((r) => r.LOTE_PRODUCTO?.trim())
+          .map((r): [string, ProductoLote] => [
+            `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
+            { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
+          ]),
+      ]).values());
 
       if (uniqueLotes.length > 0) {
         const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
@@ -573,18 +692,17 @@ export default function DesPreseDetailPage() {
       setConsecOpg1(nuevoConsec1);
 
       // ── Paso 3: Transmitir ────────────────────────────────────────────────
-      const xml1Final = buildXML1(filtro, rows, nuevoConsec1);
+      const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1);
 
       const lotesPorProducto: Record<string, string> = {};
-      rows.forEach((r) => {
+      rowsOpg1.forEach((r) => {
         const codigo = r.CODIGO_PRODUCTO.trim();
-        const lote   = r.LOTE_PRODUCTO?.trim() ?? "";
-        if (codigo) lotesPorProducto[codigo] = lote;
+        if (codigo) lotesPorProducto[codigo] = loteJul;
       });
 
       const rowsParaXml3 = rows.map((r) => ({
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
-        LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
+        LOTE_PRODUCTO:   r.LOTE_PRODUCTO,
         BODEGA:          r.BODEGA,
         UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
         KIL:             Number(r.KIL),
@@ -592,7 +710,6 @@ export default function DesPreseDetailPage() {
       }));
 
       const rowsConsumoParaXml = rowsConsumoSeleccionadas.map((r) => ({
-        CODIGO_PRODUTO:  r.CODIGO_PRODUCTO,   // alias alternativo para compatibilidad
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
         LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
         BODEGA:          r.BODEGA,
@@ -624,7 +741,7 @@ export default function DesPreseDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsConsumo, selectedConsumoIdx]);
+  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx]);
 
   const tr = transmitResult;
 
@@ -810,6 +927,9 @@ export default function DesPreseDetailPage() {
               }
             />
           </div>
+
+          {/* XMLs generados en la transmisión */}
+          <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} opg2Num={tr.opg2Num} />
         </div>
       )}
 
@@ -831,6 +951,10 @@ export default function DesPreseDetailPage() {
             </div>
           </div>
 
+          {/* XMLs previos a la transmisión */}
+          {rows.length > 0 && (
+            <XmlsPreview xmlLotes={xmlLotes} xml1={xml1} />
+          )}
         </>
       )}
 

@@ -5,7 +5,11 @@
       "Bash(mkdir -p \"C:/laragon/www/nexttest/src/app/dashboard/export-production/[id]\")",
       "Bash(npx prisma:*)",
       "Bash(node -e ' *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(python -c ' *)",
+      "Bash(python fix_spp.py)",
+      "Bash(rm fix_spp.py)",
+      "Bash(python \"C:/laragon/www/nexttest/fix_spp.py\")"
     ]
   }
 }

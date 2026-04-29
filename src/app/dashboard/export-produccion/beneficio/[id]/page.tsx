@@ -77,6 +77,14 @@ interface TransmitResult {
   };
 }
 
+interface RowOpg1 {
+  UNIDAD_PRODUCTO: string;
+  CODIGO_PRODUCTO: string;
+  bache:           number;
+  KIL:             number;
+  UND:             number;
+}
+
 interface ProductoLote { codigo: string; lote: string; }
 
 interface LoteCreacionResult {
@@ -99,6 +107,16 @@ const pA = (val: string | null | undefined, len: number) =>
 
 function fechaYMD(raw: string): string {
   return raw.split("T")[0].replace(/-/g, "");
+}
+
+function loteJuliano(fecha: string): string {
+  const y      = parseInt(fecha.slice(0, 4), 10);
+  const m      = parseInt(fecha.slice(4, 6), 10);
+  const d      = parseInt(fecha.slice(6, 8), 10);
+  const inicio = new Date(y, 0, 1);
+  const actual = new Date(y, m - 1, d);
+  const dia    = Math.round((actual.getTime() - inicio.getTime()) / 86_400_000) + 1;
+  return String(dia).padStart(3, "0") + String(y).slice(-2);
 }
 
 function pQ(val: number, intLen: number, dec: number): string {
@@ -152,9 +170,10 @@ function buildXMLLotes(rows: ProductRow[], fecha: string): string {
   return [opening, ...lines, closing].join("\n");
 }
 
-// ── XML1 — OPG1 (mismo que Salida Desprese, clase_op=002) ─────────────────
-function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
+// ── XML1 — OPG1 (clase_op=002) ────────────────────────────────────────────
+function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number): string {
   const fecha   = fechaYMD(filtro.fecha);
+  const lote    = loteJuliano(fecha);
   const opening = "000000100000001001";
 
   const header =
@@ -174,32 +193,29 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pA("",                             3) + pA("", 3) +
     pN(0,   8);
 
-  const productLines = rows.map((row, i) => {
-    const bodega = pA(filtro.bodegaItemPadre ?? row.BODEGA, 5);
-    return (
-      pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-      pA(filtro.centroOperacion,         3) +
-      pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
-      pN(consecOpg, 8) +
-      pN(i + 1,                  10) +
-      pN(0,      7) +
-      pA(row.CODIGO_PRODUCTO,    50) +
-      pA("",    20) + pA("", 20) + pA("", 20) +
-      pA(row.UNIDAD_PRODUCTO,     4) +
-      pN(100,    8) +
-      pQ(Number(row.KIL), 15, 4) +
-      pA(fecha,                   8) +
-      pA(fecha,                   8) +
-      pA("0001",                  4) +
-      pA("",                      5) +
-      pA("",                      4) +
-      pA(row.LOTE_PRODUCTO,      15) +
-      pA("",                   2000) +
-      bodega
-    );
-  });
+  const productLines = rowsOpg1.map((row, i) =>
+    pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
+    pA(filtro.centroOperacion,         3) +
+    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
+    pN(consecOpg, 8) +
+    pN(i + 1,                  10) +
+    pN(0,      7) +
+    pA(row.CODIGO_PRODUCTO,    50) +
+    pA("",    20) + pA("", 20) + pA("", 20) +
+    pA(row.UNIDAD_PRODUCTO,     4) +
+    pN(100,    8) +
+    pQ(Number(row.KIL), 15, 4) +
+    pA(fecha,                   8) +
+    pA(fecha,                   8) +
+    pA("0001",                  4) +
+    pA("",                      5) +
+    pA("",                      4) +
+    pA(lote,                   15) +
+    pA("",                   2000) +
+    pA(filtro.bodegaItemPadre ?? "", 5)
+  );
 
-  const closing = pN(rows.length + 3, 7) + "9999" + "00" + "01" + "001";
+  const closing = pN(rowsOpg1.length + 3, 7) + "9999" + "00" + "01" + "001";
   return [opening, header, ...productLines, closing].join("\n");
 }
 
@@ -450,6 +466,9 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
+// Guard contra la doble ejecución de useEffect en React Strict Mode.
+const _cargando = new Set<string>();
+
 // ── Página principal ───────────────────────────────────────────────────────
 const fmtNum = (n: number) =>
   new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -463,6 +482,7 @@ export default function BeneficioDetailPage() {
 
   const [filtro, setFiltro]   = useState<Filtro | null>(null);
   const [rows, setRows]       = useState<ProductRow[]>([]);
+  const [rowsOpg1, setRowsOpg1] = useState<RowOpg1[]>([]);
   const [bache, setBache]     = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -475,8 +495,12 @@ export default function BeneficioDetailPage() {
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
 
   const cargarDatos = useCallback(async () => {
+    if (_cargando.has(id)) return;
+    _cargando.add(id);
+
     setBache(null);
     setRows([]);
+    setRowsOpg1([]);
     setLoading(true);
     setError(null);
     setTransmitResult(null);
@@ -491,10 +515,12 @@ export default function BeneficioDetailPage() {
       setFiltro(data.filtro);
       setBache(data.bache);
       setRows(data.rows);
+      setRowsOpg1(data.rowsOpg1 ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
+      _cargando.delete(id);
     }
   }, [id]);
 
@@ -504,7 +530,7 @@ export default function BeneficioDetailPage() {
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
   const xmlLotes    = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
-  const xml1        = filtro ? buildXML1(filtro, rows, consecOpg1) : "";
+  const xml1        = filtro ? buildXML1(filtro, rowsOpg1, consecOpg1) : "";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -517,17 +543,15 @@ export default function BeneficioDetailPage() {
     setTransmitError(null);
 
     try {
-      // ── Paso 1: Crear/verificar lotes ────────────────────────────────────
-      // Solo se pre-crean los lotes de los productos reales de las filas.
+      // ── Paso 1: Crear/verificar lotes (OPG1 usa lote juliano) ───────────
       // Los lotes de PP00001/PP00002/PP00003 los gestiona el ERP al entregar OPG2 (EPG).
+      const loteJul = loteJuliano(fechaYMD(filtro.fecha));
       const uniqueLotes: ProductoLote[] = Array.from(
         new Map(
-          rows
-            .filter((r) => r.LOTE_PRODUCTO?.trim())
-            .map((r): [string, ProductoLote] => [
-              `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
-              { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
-            ])
+          rowsOpg1.map((r): [string, ProductoLote] => [
+            r.CODIGO_PRODUCTO.trim(),
+            { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
+          ])
         ).values()
       );
 
@@ -556,18 +580,17 @@ export default function BeneficioDetailPage() {
       setConsecOpg1(nuevoConsec1);
 
       // ── Paso 3: Transmitir ────────────────────────────────────────────────
-      const xml1Final = buildXML1(filtro, rows, nuevoConsec1);
+      const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1);
 
       const lotesPorProducto: Record<string, string> = {};
-      rows.forEach((r) => {
+      rowsOpg1.forEach((r) => {
         const codigo = r.CODIGO_PRODUCTO.trim();
-        const lote   = r.LOTE_PRODUCTO?.trim() ?? "";
-        if (codigo) lotesPorProducto[codigo] = lote;
+        if (codigo) lotesPorProducto[codigo] = loteJul;
       });
 
       const rowsParaXml3 = rows.map((r) => ({
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
-        LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
+        LOTE_PRODUCTO:   loteJul,
         BODEGA:          r.BODEGA,
         UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
         KIL:             Number(r.KIL),
@@ -596,7 +619,7 @@ export default function BeneficioDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows]);
+  }, [id, bache, filtro, rows, rowsOpg1]);
 
   const tr = transmitResult;
 

@@ -41,6 +41,15 @@ const selectCols = `
 const groupBy = `B.UNDBASE, B.Bodega, B.codubica, B.CODIGO, B.NOMBRE, B.CODLOTE, B.bache`;
 const orderBy = `B.Bodega, B.codubica, B.CODIGO`;
 
+// Columnas OPG1 — agrupadas solo por UNDBASE+CODIGO+bache (sin bodega/ubicación/lote)
+const selectColsOpg1 = `
+  B.UNDBASE   AS UNIDAD_PRODUCTO,
+  B.CODIGO    AS CODIGO_PRODUCTO,
+  B.bache,
+  SUM(CASE B.UNDBASE WHEN 'UND' THEN B.CANTEMPAQ ELSE B.CANTIDAD  END) AS KIL,
+  SUM(CASE B.UNDBASE WHEN 'UND' THEN B.CANTIDAD  ELSE B.CANTEMPAQ END) AS UND`;
+const groupByOpg1 = `B.UNDBASE, B.CODIGO, B.bache`;
+
 // Columnas individuales (para consumo — sin GROUP BY)
 const selectColsIndividual = `
   B.UNDBASE   AS UNIDAD_PRODUCTO,
@@ -124,7 +133,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const consumoExtraWhere = consumoExtra.length ? "\n  AND " + consumoExtra.join("\n  AND ") : "";
 
   try {
-    const { bache, rows, rowsConsumo } = await prisma.$transaction(async (tx) => {
+    const { bache, rows, rowsConsumo, rowsOpg1 } = await prisma.$transaction(async (tx) => {
 
       // 1. Obtener el siguiente bache de la secuencia del ERP
       const [bacheRow] = await tx.$queryRawUnsafe<{ bache: number | bigint }[]>(
@@ -171,6 +180,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       `;
       const rows = await tx.$queryRawUnsafe(selectSql);
 
+      // 4b. Consultar agrupado para OPG1 XML (sin bodega/ubicación/lote)
+      const selectOpg1Sql = `
+        SELECT ${selectColsOpg1}
+        FROM Mvdcto B
+        WHERE B.bache = ${bache}
+          AND (B.CANTIDAD <> 0 OR B.CANTEMPAQ <> 0)${mainExtraWhere}
+        GROUP BY ${groupByOpg1}
+        ORDER BY B.CODIGO
+      `;
+      const rowsOpg1 = await tx.$queryRawUnsafe(selectOpg1Sql);
+
       // 5. Consultar registros de consumo individualmente (sin GROUP BY)
       let rowsConsumo: unknown[] = [];
       if (hasConsumo) {
@@ -184,10 +204,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         rowsConsumo = await tx.$queryRawUnsafe(selectConsumoSql);
       }
 
-      return { bache, rows, rowsConsumo };
+      return { bache, rows, rowsConsumo, rowsOpg1 };
     }, { timeout: 30_000 });
 
-    return NextResponse.json({ filtro, bache, rows, rowsConsumo });
+    return NextResponse.json({ filtro, bache, rows, rowsConsumo, rowsOpg1 });
 
   } catch (err) {
     console.error("[POST /api/export-produccion/[id]/results]", err);

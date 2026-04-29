@@ -62,6 +62,14 @@ interface TransmitResult {
   xmls: { xml2: string; xml3: string };
 }
 
+interface RowOpg1 {
+  UNIDAD_PRODUCTO: string;
+  CODIGO_PRODUCTO: string;
+  bache:          number;
+  KIL:            number;
+  UND:            number;
+}
+
 interface ProductoLote { codigo: string; lote: string; }
 
 interface LoteCreacionResult {
@@ -84,6 +92,16 @@ const pA = (val: string | null | undefined, len: number) =>
 
 function fechaYMD(raw: string): string {
   return raw.split("T")[0].replace(/-/g, "");
+}
+
+function loteJuliano(fecha: string): string {
+  const y      = parseInt(fecha.slice(0, 4), 10);
+  const m      = parseInt(fecha.slice(4, 6), 10);
+  const d      = parseInt(fecha.slice(6, 8), 10);
+  const inicio = new Date(y, 0, 1);
+  const actual = new Date(y, m - 1, d);
+  const dia    = Math.round((actual.getTime() - inicio.getTime()) / 86_400_000) + 1;
+  return String(dia).padStart(3, "0") + String(y).slice(-2);
 }
 
 function pQ(val: number, intLen: number, dec: number): string {
@@ -135,8 +153,9 @@ function buildXMLLotes(rows: ProductRow[], fecha: string): string {
 }
 
 // ── XML1 — OPG1 (clase_op=002) ────────────────────────────────────────────
-function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): string {
+function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number): string {
   const fecha   = fechaYMD(filtro.fecha);
+  const lote    = loteJuliano(fecha);
   const opening = "000000100000001001";
 
   const header =
@@ -156,32 +175,29 @@ function buildXML1(filtro: Filtro, rows: ProductRow[], consecOpg: number): strin
     pA("",                             3) + pA("", 3) +
     pN(0,   8);
 
-  const productLines = rows.map((row, i) => {
-    const bodega = pA(filtro.bodegaItemPadre ?? row.BODEGA, 5);
-    return (
-      pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-      pA(filtro.centroOperacion,         3) +
-      pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
-      pN(consecOpg, 8) +
-      pN(i + 1,                  10) +
-      pN(0,      7) +
-      pA(row.CODIGO_PRODUCTO,    50) +
-      pA("",    20) + pA("", 20) + pA("", 20) +
-      pA(row.UNIDAD_PRODUCTO,     4) +
-      pN(100,    8) +
-      pQ(Number(row.KIL), 15, 4) +
-      pA(fecha,                   8) +
-      pA(fecha,                   8) +
-      pA("0001",                  4) +
-      pA("",                      5) +
-      pA("",                      4) +
-      pA(row.LOTE_PRODUCTO,      15) +
-      pA("",                   2000) +
-      bodega
-    );
-  });
+  const productLines = rowsOpg1.map((row, i) =>
+    pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
+    pA(filtro.centroOperacion,         3) +
+    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
+    pN(consecOpg, 8) +
+    pN(i + 1,                  10) +
+    pN(0,      7) +
+    pA(row.CODIGO_PRODUCTO,    50) +
+    pA("",    20) + pA("", 20) + pA("", 20) +
+    pA(row.UNIDAD_PRODUCTO,     4) +
+    pN(100,    8) +
+    pQ(Number(row.KIL), 15, 4) +
+    pA(fecha,                   8) +
+    pA(fecha,                   8) +
+    pA("0001",                  4) +
+    pA("",                      5) +
+    pA("",                      4) +
+    pA(lote,                   15) +
+    pA("",                   2000) +
+    pA(filtro.bodegaItemPadre ?? "", 5)
+  );
 
-  const closing = pN(rows.length + 3, 7) + "9999" + "00" + "01" + "001";
+  const closing = pN(rowsOpg1.length + 3, 7) + "9999" + "00" + "01" + "001";
   return [opening, header, ...productLines, closing].join("\n");
 }
 
@@ -428,6 +444,82 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
+// ── Panel colapsable XMLs de previsualización ─────────────────────────────
+function XmlsPreview({ xmlLotes, xml1 }: { xmlLotes: string; xml1: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            XMLs de previsualización
+          </span>
+        </div>
+        <svg className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="p-5 space-y-3">
+          <XmlBlock title="XML Lotes (tipo 403)" content={xmlLotes} />
+          <XmlBlock title="XML OPG1 — Orden de Producción" content={xml1} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Panel colapsable XMLs generados tras transmisión ──────────────────────
+function XmlsGenerados({
+  xmls, opg1Num,
+}: {
+  xmls: { xml2: string; xml3: string };
+  opg1Num: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const items = [
+    ...(xmls.xml2 ? [{ label: `OPG #${opg1Num} — Consumo SPG (470)`, content: xmls.xml2 }] : []),
+    ...(xmls.xml3 ? [{ label: `OPG #${opg1Num} — Entrega EPG (470)`, content: xmls.xml3 }] : []),
+  ];
+  if (items.length === 0) return null;
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            XMLs transmitidos ({items.length})
+          </span>
+        </div>
+        <svg className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="p-5 space-y-3">
+          {items.map(({ label, content }) => (
+            <XmlBlock key={label} title={label} content={content} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Guard contra la doble ejecución de useEffect en React Strict Mode.
+const _cargando = new Set<string>();
+
 // ── Página principal ───────────────────────────────────────────────────────
 const fmtNum = (n: number) =>
   new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -441,6 +533,7 @@ export default function ProduccionSppDetailPage() {
 
   const [filtro, setFiltro]   = useState<Filtro | null>(null);
   const [rows, setRows]       = useState<ProductRow[]>([]);
+  const [rowsOpg1, setRowsOpg1] = useState<RowOpg1[]>([]);
   const [bache, setBache]     = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -453,8 +546,12 @@ export default function ProduccionSppDetailPage() {
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
 
   const cargarDatos = useCallback(async () => {
+    if (_cargando.has(id)) return;
+    _cargando.add(id);
+
     setBache(null);
     setRows([]);
+    setRowsOpg1([]);
     setLoading(true);
     setError(null);
     setTransmitResult(null);
@@ -469,10 +566,12 @@ export default function ProduccionSppDetailPage() {
       setFiltro(data.filtro);
       setBache(data.bache);
       setRows(data.rows);
+      setRowsOpg1(data.rowsOpg1 ?? []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setLoading(false);
+      _cargando.delete(id);
     }
   }, [id]);
 
@@ -482,7 +581,7 @@ export default function ProduccionSppDetailPage() {
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
   const xmlLotes = filtro ? buildXMLLotes(rows, fechaYMD(filtro.fecha)) : "";
-  const xml1     = filtro ? buildXML1(filtro, rows, consecOpg1) : "";
+  const xml1     = filtro ? buildXML1(filtro, rowsOpg1, consecOpg1) : "";
 
   const transmitir = useCallback(async (esReintento = false) => {
     if (!bache || !filtro) return;
@@ -496,14 +595,13 @@ export default function ProduccionSppDetailPage() {
 
     try {
       // ── Paso 1: Crear/verificar lotes ───────────────────────────────────
+      const loteJul = loteJuliano(fechaYMD(filtro.fecha));
       const uniqueLotes: ProductoLote[] = Array.from(
         new Map(
-          rows
-            .filter((r) => r.LOTE_PRODUCTO?.trim())
-            .map((r): [string, ProductoLote] => [
-              `${r.CODIGO_PRODUCTO}|${r.LOTE_PRODUCTO}`,
-              { codigo: r.CODIGO_PRODUCTO, lote: r.LOTE_PRODUCTO },
-            ])
+          rowsOpg1.map((r): [string, ProductoLote] => [
+            r.CODIGO_PRODUCTO.trim(),
+            { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
+          ])
         ).values()
       );
 
@@ -530,18 +628,17 @@ export default function ProduccionSppDetailPage() {
       setConsecOpg1(nuevoConsec1);
 
       // ── Paso 3: Transmitir ───────────────────────────────────────────────
-      const xml1Final = buildXML1(filtro, rows, nuevoConsec1);
+      const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1);
 
       const lotesPorProducto: Record<string, string> = {};
-      rows.forEach((r) => {
+      rowsOpg1.forEach((r) => {
         const codigo = r.CODIGO_PRODUCTO.trim();
-        const lote   = r.LOTE_PRODUCTO?.trim() ?? "";
-        if (codigo) lotesPorProducto[codigo] = lote;
+        if (codigo) lotesPorProducto[codigo] = loteJul;
       });
 
       const rowsParaXml3 = rows.map((r) => ({
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
-        LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
+        LOTE_PRODUCTO:   r.LOTE_PRODUCTO,
         BODEGA:          r.BODEGA,
         UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
         KIL:             Number(r.KIL),
@@ -570,7 +667,7 @@ export default function ProduccionSppDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows]);
+  }, [id, bache, filtro, rows, rowsOpg1]);
 
   const tr = transmitResult;
   void PENDIENTE_OPG;
@@ -709,6 +806,11 @@ export default function ProduccionSppDetailPage() {
                 ? () => transmitir(true) : undefined
             }
           />
+
+          {/* XMLs generados */}
+          {(tr.xmls.xml2 || tr.xmls.xml3) && (
+            <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} />
+          )}
         </div>
       )}
 
@@ -730,6 +832,9 @@ export default function ProduccionSppDetailPage() {
             </div>
           </div>
 
+          {rows.length > 0 && (
+            <XmlsPreview xmlLotes={xmlLotes} xml1={xml1} />
+          )}
         </>
       )}
 
