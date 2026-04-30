@@ -119,59 +119,54 @@ export async function POST(req: Request) {
     // ── 2. Si todos ya existen, no hay nada que enviar ────────────────────
     if (nuevos.length === 0) {
       return NextResponse.json({
-        exitoso:  true,
+        exitoso:      true,
         omitidos,
-        nuevos:   [],
-        creados:  [],
-        errores:  [] as ErpError[],
-        xmlLotes: null,
+        nuevos:       [],
+        creados:      [],
+        errores:      [] as ErpError[],
+        respuestaRaw: "",
+        xmlLotes:     null,
       });
     }
 
-    // ── 3. Construir y enviar XML de lotes al ERP ─────────────────────────
-    const xmlLotes = buildXMLLotes(nuevos, fecha);
-    const result   = await callSoap(xmlLotes);
-
-    // ── 4. Persistir lotes ────────────────────────────────────────────────────
-    // En el XML los productos van en líneas i+2 (base 0), por lo que
-    // nuevos[nroLinea - 2] identifica el producto exacto de cada error.
+    // ── 3. Enviar un XML individual por lote al ERP ───────────────────────
+    // Enviar todos juntos hace que si uno ya existe en ERP el batch entero
+    // falle. Enviando de a uno, un "ya existe" solo afecta ese lote.
     const LOTE_YA_EXISTE = "el lote que desea adicionar ya existe";
+    const xmlsEnviados: string[] = [];
+    const creados:      ProductoLote[] = [];
+    const erroresReales: ErpError[]   = [];
 
-    // Productos cuyo error es "ya existe" → están en ERP, los registramos.
-    const yaExistenEnErp: ProductoLote[] = result.errores
-      .filter((e) => e.detalle.toLowerCase().includes(LOTE_YA_EXISTE))
-      .map((e) => nuevos[e.nroLinea - 2])
-      .filter((p): p is ProductoLote => p !== undefined);
-
-    // Errores reales: los que NO son "ya existe".
-    const erroresReales = result.errores.filter(
-      (e) => !e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
-    );
-
-    // Persistir: los creados por ERP (exitoso) + los que ya existían en ERP.
-    const aPersistir = result.exitoso ? nuevos : yaExistenEnErp;
-
-    let creados: ProductoLote[] = [];
-    if (aPersistir.length > 0) {
-      await Promise.all(
-        aPersistir.map((p) =>
-          prisma.loteCreado.upsert({
-            where:  { codigoProducto_lote: { codigoProducto: p.codigo, lote: p.lote } },
-            create: { codigoProducto: p.codigo, lote: p.lote },
+    for (const lote of nuevos) {
+      const xml    = buildXMLLotes([lote], fecha);
+      xmlsEnviados.push(xml);
+      try {
+        const result  = await callSoap(xml);
+        const yaExiste = result.errores.some((e) =>
+          e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
+        );
+        if (result.exitoso || yaExiste) {
+          await prisma.loteCreado.upsert({
+            where:  { codigoProducto_lote: { codigoProducto: lote.codigo, lote: lote.lote } },
+            create: { codigoProducto: lote.codigo, lote: lote.lote },
             update: {},
-          })
-        )
-      );
-      creados = aPersistir;
+          });
+          creados.push(lote);
+        } else {
+          erroresReales.push(...result.errores);
+        }
+      } catch { /* continuar con el siguiente lote */ }
     }
 
+    const xmlLotes = xmlsEnviados.join("\n\n");
+
     return NextResponse.json({
-      exitoso:      result.exitoso || erroresReales.length === 0,
+      exitoso:      erroresReales.length === 0,
       omitidos,
       nuevos,
       creados,
       errores:      erroresReales,
-      respuestaRaw: result.respuestaRaw,
+      respuestaRaw: "",
       xmlLotes,
     });
   } catch (err) {

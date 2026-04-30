@@ -36,6 +36,7 @@ interface Filtro {
   productosSinLote: string | null;
   ppCodigos: string | null;
   ppConLote: string | null;
+  productosSinCantAdicional: string | null;
 }
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";
@@ -73,11 +74,12 @@ interface TransmitResult {
   opg1:     OPGResult;
   opg2:     OPGResult;
   xmls: {
-    xml1b: string;
-    xml2b: string;
-    xml3b: string;
-    xml2:  string;
-    xml3:  string;
+    xml1b:             string;
+    xml2b:             string;
+    xml3b:             string;
+    xml2:              string;
+    xml3:              string;
+    xmlLotesEpgOpg2:   string;
   };
 }
 
@@ -478,6 +480,80 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
+// ── Panel XML colapsable: preview antes de enviar ────────────────────────
+function XmlsPreview({ preview }: { preview: { xmlLotes: string; xml1: string } }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors"
+      >
+        <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          XMLs a transmitir
+        </span>
+        <svg className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="p-5 space-y-4">
+          <XmlBlock title="XML Lotes (403)" content={preview.xmlLotes} />
+          <XmlBlock title="XML OPG1 — Orden" content={preview.xml1} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Panel XML colapsable: todos los XMLs generados ───────────────────────
+function XmlsGenerados({
+  preview,
+  xmls,
+  opg1Num,
+  opg2Num,
+}: {
+  preview:  { xmlLotes: string; xml1: string } | null;
+  xmls:     TransmitResult["xmls"];
+  opg1Num:  number;
+  opg2Num:  number;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors"
+      >
+        <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          XMLs generados
+        </span>
+        <svg className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="p-5 space-y-4">
+          {preview && <XmlBlock title="XML Lotes (403)" content={preview.xmlLotes} />}
+          {preview && <XmlBlock title={`XML OPG1 #${opg1Num} — Orden`} content={preview.xml1} />}
+          {opg2Num > 0 && xmls.xml1b && <XmlBlock title={`XML OPG2 #${opg2Num} — Orden`} content={xmls.xml1b} />}
+          {opg2Num > 0 && xmls.xml2b && <XmlBlock title={`XML OPG2 #${opg2Num} — SPG Consumo`} content={xmls.xml2b} />}
+          {opg2Num > 0 && xmls.xmlLotesEpgOpg2 && <XmlBlock title={`XML Lotes EPG OPG2 #${opg2Num}`} content={xmls.xmlLotesEpgOpg2} />}
+          {opg2Num > 0 && xmls.xml3b && <XmlBlock title={`XML OPG2 #${opg2Num} — EPG Entrega`} content={xmls.xml3b} />}
+          {xmls.xml2 && <XmlBlock title={`XML OPG1 #${opg1Num} — SPG Consumo`} content={xmls.xml2} />}
+          {xmls.xml3 && <XmlBlock title={`XML OPG1 #${opg1Num} — EPG Entrega`} content={xmls.xml3} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Guard contra la doble ejecución de useEffect en React Strict Mode.
 const _cargando = new Set<string>();
 
@@ -505,6 +581,7 @@ export default function BeneficioDetailPage() {
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
+  const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
 
   const cargarDatos = useCallback(async () => {
     if (_cargando.has(id)) return;
@@ -518,6 +595,7 @@ export default function BeneficioDetailPage() {
     setTransmitResult(null);
     setTransmitError(null);
     setLotesResult(null);
+    setXmlsPreview(null);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/results`, { method: "POST" });
       const text = await res.text();
@@ -576,6 +654,7 @@ export default function BeneficioDetailPage() {
         ).values()
       );
 
+      let xmlLotesEnviado = "// Todos los lotes ya existían — no se envió XML";
       if (uniqueLotes.length > 0) {
         const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
           method:  "POST",
@@ -586,6 +665,7 @@ export default function BeneficioDetailPage() {
         if (!lotesText) throw new Error("Sin respuesta al crear lotes");
         const lotesData: LoteCreacionResult = JSON.parse(lotesText);
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
+        xmlLotesEnviado = lotesData.xmlLotes ?? xmlLotesEnviado;
         setLotesResult(lotesData);
         // En Beneficio no se detiene el proceso si los lotes fallan:
         // pueden ya existir en el ERP aunque no estén en nuestra DB.
@@ -600,8 +680,9 @@ export default function BeneficioDetailPage() {
       const nuevoConsec1: number = seqData.consecOpg;
       setConsecOpg1(nuevoConsec1);
 
-      // ── Paso 3: Transmitir ────────────────────────────────────────────────
+      // ── Paso 3: Construir XMLs y mostrar preview ─────────────────────────
       const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1, sinLote);
+      setXmlsPreview({ xmlLotes: xmlLotesEnviado, xml1: xml1Final });
 
       const lotesPorProducto: Record<string, string> = {};
       rowsOpg1.forEach((r) => {
@@ -758,6 +839,19 @@ export default function BeneficioDetailPage() {
           <p className="text-sm font-semibold text-slate-700">Paso 1 — Registro de lotes</p>
           <LotesResultPanel result={lotesResult} />
         </div>
+      )}
+
+      {/* XMLs antes de enviar (visible mientras transmite y hasta que llega el resultado) */}
+      {xmlsPreview && !tr && <XmlsPreview preview={xmlsPreview} />}
+
+      {/* XMLs generados (tras transmisión exitosa o con error) */}
+      {tr && (
+        <XmlsGenerados
+          preview={xmlsPreview}
+          xmls={tr.xmls}
+          opg1Num={tr.opg1Num}
+          opg2Num={tr.opg2Num}
+        />
       )}
 
       {/* Resultados transmisión */}

@@ -28,6 +28,7 @@ export interface FilterSet {
   productosSinLote: string | null;
   ppCodigos: string | null;
   ppConLote: string | null;
+  productosSinCantAdicional: string | null;
 }
 
 export type ModuloKey =
@@ -120,6 +121,7 @@ const emptyForm = {
   productosSinLote: "",
   ppCodigos: "",
   ppConLote: "",
+  productosSinCantAdicional: "",
 };
 
 export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
@@ -191,8 +193,9 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
       tipoMovimientoConsumo:  item.tipoMovimientoConsumo  ?? "",
       productosEnProceso:     item.productosEnProceso     ?? "",
       productosSinLote:       item.productosSinLote       ?? "",
-      ppCodigos:              item.ppCodigos              ?? "",
-      ppConLote:              item.ppConLote              ?? "",
+      ppCodigos:                 item.ppCodigos                 ?? "",
+      ppConLote:                 item.ppConLote                 ?? "",
+      productosSinCantAdicional: item.productosSinCantAdicional ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -482,6 +485,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                 <Field label="Productos sin lote" name="productosSinLote" value={form.productosSinLote} onChange={handleChange} maxLength={500} placeholder="Ej: PR00001, PR00002" />
                 <Field label="Producto en proceso para OPG" name="ppCodigos" value={form.ppCodigos} onChange={handleChange} maxLength={200} placeholder="Ej: PP00002" />
                 <Field label="PP con lote en el consumo" name="ppConLote" value={form.ppConLote} onChange={handleChange} maxLength={200} placeholder="Ej: PP00001, PP00002, PP00003" />
+                <Field label="Productos sin cantidad adicional" name="productosSinCantAdicional" value={form.productosSinCantAdicional} onChange={handleChange} maxLength={500} placeholder="Ej: PR00001, PR00002" />
               </div>
             </>
           )}

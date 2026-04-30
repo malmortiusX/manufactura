@@ -112,7 +112,7 @@ function buildXML2(
   fecha:            string,
   consecOpg:        number,
   componentes:      ComponenteOP[],
-  lotesPorProducto: Record<string, string>,
+  lotesPorProducto: PpItem[],
   productoProceso:  string[],
 ): string {
   const opening = "000000100000001001";
@@ -131,9 +131,15 @@ function buildXML2(
     pA("OPG", 3) +
     pN(consecOpg, 8);
 
+  const y      = parseInt(fecha.slice(0, 4), 10);
+  const m      = parseInt(fecha.slice(4, 6), 10);
+  const d      = parseInt(fecha.slice(6, 8), 10);
+  const dia    = Math.round((new Date(y, m - 1, d).getTime() - new Date(y, 0, 1).getTime()) / 86_400_000) + 1;
+  const loteJul = String(dia).padStart(3, "0") + String(y).slice(-2);
+
   const productLines = componentes.map((comp, i) => {
     const esPp    = productoProceso.includes(comp.hijoReferencia.trim());
-    const lotePad = esPp ? (lotesPorProducto[comp.padreReferencia.trim()] ?? "") : "";
+    const lotePad = esPp ? loteJul : "";
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
       pA(centroOperacion,       3) +
@@ -361,6 +367,36 @@ function buildXMLLotes(productos: ProductoLote[], fechaYMD: string): string {
   return [opening, ...lines, closing].join("\n");
 }
 
+// ── Envío individual de lotes (una petición SOAP por lote) ───────────────
+// Enviar todos en un solo XML hace que si uno ya existe en ERP el batch entero
+// falle. Enviando de a uno, un "ya existe" solo afecta ese lote.
+const LOTE_YA_EXISTE_MSG = "el lote que desea adicionar ya existe";
+
+async function enviarLotesIndividual(
+  lotesNuevos: ProductoLote[],
+  fecha: string,
+): Promise<string> {
+  const xmls: string[] = [];
+  for (const lote of lotesNuevos) {
+    const xml = buildXMLLotes([lote], fecha);
+    xmls.push(xml);
+    try {
+      const result = await callSoap(xml);
+      const yaExiste = result.errores.some((e) =>
+        e.detalle.toLowerCase().includes(LOTE_YA_EXISTE_MSG)
+      );
+      if (result.exitoso || yaExiste) {
+        await prisma.loteCreado.upsert({
+          where:  { codigoProducto_lote: { codigoProducto: lote.codigo, lote: lote.lote } },
+          create: { codigoProducto: lote.codigo, lote: lote.lote },
+          update: {},
+        });
+      }
+    } catch { /* continuar con el siguiente */ }
+  }
+  return xmls.join("\n\n");
+}
+
 // ── Consecutivo OPG desde Prisma (sin HTTP) ───────────────────────────────
 async function nextConsecOpg(): Promise<number> {
   const rec = await prisma.consecutivo.upsert({
@@ -390,7 +426,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .split(",").map((s) => s.trim()).filter(Boolean);
 
     // Productos en proceso que llevan lote en el consumo (SPG) de OPG1
-    const PP_CON_LOTE = (filtro.ppConLote ?? "PP00001,PP00002,PP00003")
+    const PP_CON_LOTE = (filtro.ppConLote ?? "PP00001,PP00002,PP00003,PP00004,PP00005")
       .split(",").map((s) => s.trim()).filter(Boolean);
 
     const body = await req.json() as {
@@ -435,12 +471,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let consumoOpg1Result: DocResult = PENDIENTE;
     let entregaOpg1Result: DocResult = PENDIENTE;
 
-    let consecOpg2 = 0;
-    let xml1b = "";
-    let xml2b = "";
-    let xml3b = "";
-    let xml2  = "";
-    let xml3  = "";
+    let consecOpg2          = 0;
+    let xml1b               = "";
+    let xml2b               = "";
+    let xml3b               = "";
+    let xml2                = "";
+    let xml3                = "";
+    let xmlLotesEpgOpg2     = "";
 
     let opg1Componentes: ComponenteOP[] = [];
     let ppItems:         PpItem[]       = [];   // solo PP00002 → decide si crear OPG2
@@ -504,18 +541,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
           const lotesNuevos  = ppLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
           if (lotesNuevos.length > 0) {
-            const loteResult = await callSoap(buildXMLLotes(lotesNuevos, fecha));
-            if (loteResult.exitoso) {
-              await Promise.all(
-                lotesNuevos.map((p) =>
-                  prisma.loteCreado.upsert({
-                    where:  { codigoProducto_lote: { codigoProducto: p.codigo, lote: p.lote } },
-                    create: { codigoProducto: p.codigo, lote: p.lote },
-                    update: {},
-                  })
-                )
-              );
-            }
+            await enviarLotesIndividual(lotesNuevos, fecha);
           }
         } catch { /* continuar aunque falle la creación de lotes PP */ }
 
@@ -553,14 +579,41 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
           if (consumoOpg2Result.exitoso) {
 
-            // ── Paso 5: EPG OPG2 ────────────────────────────────────────
+            // ── Paso 5: Crear lotes PP antes de EPG OPG2 ────────────────
+            const rowsPP: RowXml3[] = ppEntregaItems.map((p) => ({
+              CODIGO_PRODUCTO: p.codigo, 
+              LOTE_PRODUCTO: p.lote,
+              BODEGA: filtro.bodegaItemPadre?.trim() ?? "",
+              UNIDAD_PRODUCTO: p.unidad, 
+              KIL: p.cantidad, 
+              UND: 0,
+            }));
             try {
-              // Entrega los tres PP (PP00001, PP00002, PP00003) con sus cantidades de OPG1
-              const rowsPP: RowXml3[] = ppEntregaItems.map((p) => ({
-                CODIGO_PRODUCTO: p.codigo, LOTE_PRODUCTO: p.lote,
-                BODEGA: filtro.bodegaItemPadre?.trim() ?? "",
-                UNIDAD_PRODUCTO: p.unidad, KIL: p.cantidad, UND: 0,
-              }));
+              const ppEntregaLotes: ProductoLote[] = Array.from(
+                new Map(
+                  rowsPP
+                    .filter((r) => r.LOTE_PRODUCTO?.trim())
+                    .map((r) => [
+                      `${r.CODIGO_PRODUCTO.trim()}|${r.LOTE_PRODUCTO.trim()}`,
+                      { codigo: r.CODIGO_PRODUCTO.trim(), lote: r.LOTE_PRODUCTO.trim() },
+                    ])
+                ).values()
+              );
+              if (ppEntregaLotes.length > 0) {
+                const existentes = await prisma.loteCreado.findMany({
+                  where:  { OR: ppEntregaLotes.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })) },
+                  select: { codigoProducto: true, lote: true },
+                });
+                const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
+                const lotesNuevos  = ppEntregaLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
+                if (lotesNuevos.length > 0) {
+                  xmlLotesEpgOpg2 = await enviarLotesIndividual(lotesNuevos, fecha);
+                }
+              }
+            } catch { /* continuar aunque falle la creación de lotes */ }
+
+            // ── Paso 5b: EPG OPG2 ───────────────────────────────────────
+            try {
               xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre);
               await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
               entregaOpg2Result = await callSoap(xml3b);
@@ -585,18 +638,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
           const lotesNuevos  = ppConLoteLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
           if (lotesNuevos.length > 0) {
-            const loteResult = await callSoap(buildXMLLotes(lotesNuevos, fecha));
-            if (loteResult.exitoso) {
-              await Promise.all(
-                lotesNuevos.map((p) =>
-                  prisma.loteCreado.upsert({
-                    where:  { codigoProducto_lote: { codigoProducto: p.codigo, lote: p.lote } },
-                    create: { codigoProducto: p.codigo, lote: p.lote },
-                    update: {},
-                  })
-                )
-              );
-            }
+            await enviarLotesIndividual(lotesNuevos, fecha);
           }
         } catch { /* continuar aunque falle */ }
       }
@@ -605,15 +647,49 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Depende de: EPG OPG2 exitosa (si había PP) o de OPG1 directamente (si no había PP)
       if (puedeOpg1Phase && opg1Componentes.length > 0) {
         try {
-          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, lotesPorProducto, PP_CON_LOTE);
+          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, ppEntregaItems, PP_CON_LOTE);
           await prisma.opgLog.update({ where: { id: log1.id }, data: { xml2 } });
           consumoOpg1Result = await callSoap(xml2);
         } catch (e) { consumoOpg1Result = mkErr(e); }
 
-        // ── Paso 7: EPG OPG1 ──────────────────────────────────────────────
+        // ── Paso 7: Crear lotes de productos entrega antes de EPG OPG1 ──────
         if (consumoOpg1Result.exitoso) {
           try {
-            xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rows, filtro.bodegaItemPadre);
+            const entregaLotes: ProductoLote[] = Array.from(
+              new Map(
+                rows
+                  .filter((r) => r.LOTE_PRODUCTO?.trim())
+                  .map((r) => [
+                    `${r.CODIGO_PRODUCTO.trim()}|${r.LOTE_PRODUCTO.trim()}`,
+                    { codigo: r.CODIGO_PRODUCTO.trim(), lote: r.LOTE_PRODUCTO.trim() },
+                  ])
+              ).values()
+            );
+            if (entregaLotes.length > 0) {
+              const existentes = await prisma.loteCreado.findMany({
+                where:  { OR: entregaLotes.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })) },
+                select: { codigoProducto: true, lote: true },
+              });
+              const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
+              const lotesNuevos  = entregaLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
+              if (lotesNuevos.length > 0) {
+                await enviarLotesIndividual(lotesNuevos, fecha);
+              }
+            }
+          } catch { /* continuar aunque falle la creación de lotes */ }
+
+          // ── Paso 8: EPG OPG1 ────────────────────────────────────────────
+          try {
+            const sinCantAdicional = new Set(
+              (filtro.productosSinCantAdicional ?? "")
+                .split(",").map((s) => s.trim()).filter(Boolean)
+            );
+            const rowsEpg1 = rows.map((r) =>
+              sinCantAdicional.has(r.CODIGO_PRODUCTO.trim())
+                ? { ...r, UND: 0 }
+                : r
+            );
+            xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre);
             await prisma.opgLog.update({ where: { id: log1.id }, data: { xml3 } });
             entregaOpg1Result = await callSoap(xml3);
           } catch (e) { entregaOpg1Result = mkErr(e); }
@@ -680,7 +756,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         consumo: toDocResult(consumoOpg2Result,  ordenOpg2Result.exitoso),
         entrega: toDocResult(entregaOpg2Result,  consumoOpg2Result.exitoso),
       },
-      xmls: { xml1b, xml2b, xml3b, xml2, xml3 },
+      xmls: { xml1b, xml2b, xml3b, xml2, xml3, xmlLotesEpgOpg2 },
     });
   } catch (err) {
     console.error("[POST /api/export-produccion/[id]/transmit-beneficio]", err);
