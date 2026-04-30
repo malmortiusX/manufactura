@@ -93,6 +93,8 @@ model ExportProduccion {
   // Configuración productos (beneficio)
   productosEnProceso      String?  @db.VarChar(500)
   productosSinLote        String?  @db.VarChar(500)
+  ppCodigos               String?  @db.VarChar(200)
+  ppConLote               String?  @db.VarChar(200)
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt

@@ -34,6 +34,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       tipoMovimientoConsumo:  body.tipoMovimientoConsumo  || null,
       productosEnProceso:     body.productosEnProceso     || null,
       productosSinLote:       body.productosSinLote       || null,
+      ppCodigos:              body.ppCodigos              || null,
+      ppConLote:              body.ppConLote              || null,
     },
   });
 

@@ -34,6 +34,8 @@ interface Filtro {
   tipoDoctoOrden: string | null;
   productosEnProceso: string | null;
   productosSinLote: string | null;
+  ppCodigos: string | null;
+  ppConLote: string | null;
 }
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";

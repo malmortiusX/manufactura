@@ -21,11 +21,6 @@ import {
 
 export type { ErpError, DocResult } from "@/lib/erp-soap";
 
-// Producto en proceso que genera OPG2
-const PP_CODIGOS = ["PP00002"];
-
-// Productos en proceso que llevan lote en el consumo (SPG) de OPG1
-const PP_CON_LOTE = ["PP00001", "PP00002", "PP00003"];
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
 const pN = (val: string | number | null | undefined, len: number) =>
@@ -389,6 +384,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const filtro = await prisma.exportProduccion.findUnique({ where: { id: filtroId } });
     if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
+
+    // Productos en proceso que generan OPG2 — configurables desde el filtro
+    const PP_CODIGOS = (filtro.ppCodigos ?? "PP00002")
+      .split(",").map((s) => s.trim()).filter(Boolean);
+
+    // Productos en proceso que llevan lote en el consumo (SPG) de OPG1
+    const PP_CON_LOTE = (filtro.ppConLote ?? "PP00001,PP00002,PP00003")
+      .split(",").map((s) => s.trim()).filter(Boolean);
 
     const body = await req.json() as {
       bache:            number;

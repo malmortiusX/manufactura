@@ -26,6 +26,8 @@ export interface FilterSet {
   tipoMovimientoConsumo: string | null;
   productosEnProceso: string | null;
   productosSinLote: string | null;
+  ppCodigos: string | null;
+  ppConLote: string | null;
 }
 
 export type ModuloKey =
@@ -116,6 +118,8 @@ const emptyForm = {
   tipoMovimientoConsumo: "",
   productosEnProceso: "",
   productosSinLote: "",
+  ppCodigos: "",
+  ppConLote: "",
 };
 
 export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
@@ -187,6 +191,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
       tipoMovimientoConsumo:  item.tipoMovimientoConsumo  ?? "",
       productosEnProceso:     item.productosEnProceso     ?? "",
       productosSinLote:       item.productosSinLote       ?? "",
+      ppCodigos:              item.ppCodigos              ?? "",
+      ppConLote:              item.ppConLote              ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -471,9 +477,11 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                   Configuración productos
                 </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pl-4 border-l-2 border-rose-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 pl-4 border-l-2 border-rose-100">
                 <Field label="Productos en proceso" name="productosEnProceso" value={form.productosEnProceso} onChange={handleChange} maxLength={500} placeholder="Ej: PI00001, PI00002" />
                 <Field label="Productos sin lote" name="productosSinLote" value={form.productosSinLote} onChange={handleChange} maxLength={500} placeholder="Ej: PR00001, PR00002" />
+                <Field label="Producto en proceso para OPG" name="ppCodigos" value={form.ppCodigos} onChange={handleChange} maxLength={200} placeholder="Ej: PP00002" />
+                <Field label="PP con lote en el consumo" name="ppConLote" value={form.ppConLote} onChange={handleChange} maxLength={200} placeholder="Ej: PP00001, PP00002, PP00003" />
               </div>
             </>
           )}
