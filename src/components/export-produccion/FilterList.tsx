@@ -37,7 +37,7 @@ export type ModuloKey =
   | "entrada-beneficio"
   | "salida-beneficio"
   | "beneficio"
-  | "desprese"
+  | "produccion-cpp"
   | "produccion-spp";
 
 const MODULO_LABELS: Record<ModuloKey, string> = {
@@ -46,7 +46,7 @@ const MODULO_LABELS: Record<ModuloKey, string> = {
   "entrada-beneficio": "Entrada Beneficio",
   "salida-beneficio":  "Salida Beneficio",
   "beneficio":         "Beneficio",
-  "desprese":          "Desprese",
+  "produccion-cpp":    "Con Prod. en Proceso",
   "produccion-spp":    "Sin Prod. en Proceso",
 };
 
@@ -56,7 +56,7 @@ const MODULO_COLORS: Record<ModuloKey, string> = {
   "entrada-beneficio": "bg-teal-50 text-teal-700 border-teal-200",
   "salida-beneficio":  "bg-orange-50 text-orange-700 border-orange-200",
   "beneficio":         "bg-rose-50 text-rose-700 border-rose-200",
-  "desprese":          "bg-amber-50 text-amber-700 border-amber-200",
+  "produccion-cpp":    "bg-amber-50 text-amber-700 border-amber-200",
   "produccion-spp":    "bg-indigo-50 text-indigo-700 border-indigo-200",
 };
 
@@ -436,7 +436,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
             </div>
           </div>
 
-          {modulo === "desprese" && (
+          {modulo === "produccion-cpp" && (
             <>
               <div className="my-6 border-t border-slate-100" />
               <div className="mb-4">
@@ -446,11 +446,26 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-amber-100">
-                <Field label="Producto en Proceso" name="productoProceso" value={form.productoProceso} onChange={handleChange} maxLength={50} placeholder="Ej: PI00001" />
                 <Field label="Bodega" name="bodegaConsumo" value={form.bodegaConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: BOD02" />
                 <Field label="Ubicación" name="ubicacionConsumo" value={form.ubicacionConsumo} onChange={handleChange} maxLength={10} placeholder="Ej: B-01" />
                 <Field label="Tipo Documento" name="tipoDocumentoConsumo" value={form.tipoDocumentoConsumo} onChange={handleChange} maxLength={3} placeholder="Ej: FAC" />
                 <Field label="Tipo Movimiento" name="tipoMovimientoConsumo" value={form.tipoMovimientoConsumo} onChange={handleChange} maxLength={5} placeholder="Ej: SAL" />
+              </div>
+            </>
+          )}
+
+          {(modulo === "produccion-cpp" || modulo === "produccion-spp") && (
+            <>
+              <div className="my-6 border-t border-slate-100" />
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  Configuración productos
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 pl-4 border-l-2 border-amber-100">
+                <Field label="Producto en proceso" name="productoProceso" value={form.productoProceso} onChange={handleChange} maxLength={50} placeholder="Ej: PI00001" />
+                <Field label="Productos sin lote" name="productosSinLote" value={form.productosSinLote} onChange={handleChange} maxLength={500} placeholder="Ej: PR00001, PR00002" />
               </div>
             </>
           )}

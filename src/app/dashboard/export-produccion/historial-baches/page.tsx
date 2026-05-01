@@ -28,7 +28,7 @@ interface OpgLogRow {
 
 // ── Helpers visuales ──────────────────────────────────────────────────────────
 const MODULO_LABEL: Record<string, string> = {
-  desprese:             "Desprese",
+  "produccion-cpp":     "Con Prod. en Proceso",
   beneficio:            "Beneficio",
   "produccion-spp":     "Sin Prod. en Proceso",
   "entrada-desprese":   "Entrada Desprese",
@@ -38,7 +38,7 @@ const MODULO_LABEL: Record<string, string> = {
 };
 
 const MODULO_COLOR: Record<string, string> = {
-  desprese:            "bg-orange-50 text-orange-700 border-orange-200",
+  "produccion-cpp":    "bg-amber-50 text-amber-700 border-amber-200",
   beneficio:           "bg-emerald-50 text-emerald-700 border-emerald-200",
   "produccion-spp":    "bg-indigo-50 text-indigo-700 border-indigo-200",
   "entrada-desprese":  "bg-blue-50 text-blue-700 border-blue-200",

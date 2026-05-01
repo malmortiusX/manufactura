@@ -15,7 +15,7 @@ const pageTitles: Record<string, string> = {
   "/dashboard/export-produccion/entrada-beneficio":      "Entrada Beneficio",
   "/dashboard/export-produccion/salida-beneficio":       "Salida Beneficio",
   "/dashboard/export-produccion/beneficio":              "Beneficio",
-  "/dashboard/export-produccion/desprese":               "Desprese",
+  "/dashboard/export-produccion/produccion-cpp":          "Con Prod. en Proceso",
   "/dashboard/export-produccion/produccion-spp":         "Sin Prod. en Proceso",
   "/dashboard/export-produccion/historial-baches":       "Historial de baches",
 };
@@ -29,7 +29,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
      pathname.startsWith("/dashboard/export-produccion/salida-beneficio/")  ? "Salida Beneficio"  :
      pathname.startsWith("/dashboard/export-produccion/entrada-beneficio/") ? "Entrada Beneficio" :
      pathname.startsWith("/dashboard/export-produccion/beneficio/")         ? "Beneficio"         :
-     pathname.startsWith("/dashboard/export-produccion/desprese/")          ? "Desprese"          :
+     pathname.startsWith("/dashboard/export-produccion/produccion-cpp/")     ? "Con Prod. en Proceso" :
      pathname.startsWith("/dashboard/export-produccion/produccion-spp/")   ? "Sin Prod. en Proceso" :
      "Dashboard");
 

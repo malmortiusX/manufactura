@@ -254,9 +254,10 @@ function buildXML3(
 
 // ── XML3b — Entrega OPG2 (EPG con reglas de PP) ───────────────────────────
 // Diferencias respecto a buildXML3 (OPG1):
-//   f470_referencia_item        → siempre "PP00002" para todas las líneas
-//   f470_referencia_item_otros  → código real del producto; vacío si es PP00002
-//   f_nro_reg_item_padre        → 1 para todos excepto PP00002 que lleva 0
+//   - El producto PP_CODIGOS va siempre primero.
+//   - f470_referencia_item        → código del producto en proceso para OPG (ppCodigos[0])
+//   - f470_referencia_item_otros  → código real del producto; vacío si es ppCodigos
+//   - f_nro_reg_item_padre        → 0 si es ppCodigos, 1 para los demás
 function buildXML3b(
   centroOperacion: string,
   nombre:          string,
@@ -264,7 +265,16 @@ function buildXML3b(
   consecOpg:       number,
   rows:            RowXml3[],
   bodegaItemPadre: string | null | undefined,
+  ppCodigos:       string[],
 ): string {
+  const ppRef = ppCodigos[0] ?? "PP00002";   // código de referencia PP para todas las líneas
+
+  // El producto en proceso para OPG debe ir siempre primero
+  const rowsOrdenadas = [
+    ...rows.filter((r) =>  ppCodigos.includes(r.CODIGO_PRODUCTO.trim())),
+    ...rows.filter((r) => !ppCodigos.includes(r.CODIGO_PRODUCTO.trim())),
+  ];
+
   const opening = "000000100000001001";
 
   const encabezado =
@@ -285,11 +295,11 @@ function buildXML3b(
     pA("",   15) +
     pA("70010101", 15);
 
-  const productLines = rows.map((row, i) => {
-    const bodega   = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
-    const esPP2    = row.CODIGO_PRODUCTO.trim() === "PP00002";
-    const itemOtro = esPP2 ? "" : row.CODIGO_PRODUCTO;   // f470_referencia_item_otros
-    const nroRegPadre = esPP2 ? 0 : 2;                   // f_nro_reg_item_padre
+  const productLines = rowsOrdenadas.map((row, i) => {
+    const bodega      = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
+    const esPpCodigo  = ppCodigos.includes(row.CODIGO_PRODUCTO.trim());
+    const itemOtro    = esPpCodigo ? "" : row.CODIGO_PRODUCTO;  // f470_referencia_item_otros
+    const nroRegPadre = esPpCodigo ? 0 : 1;                    // f_nro_reg_item_padre
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(2, 2) + pN(2, 2) + pN(1, 3) +
       pA(centroOperacion,   3) +
@@ -299,10 +309,10 @@ function buildXML3b(
       pA("OPG",             3) +
       pN(consecOpg,         8) +
       pN(0,      7) +
-      pA("PP00002",        50) +                          // f470_referencia_item
+      pA(ppRef,            50) +                               // f470_referencia_item
       pA("",    20) + pA("",    20) + pA("",    20) +
       pN(0,      7) +
-      pA(itemOtro,         50) +                          // f470_referencia_item_otros
+      pA(itemOtro,         50) +                               // f470_referencia_item_otros
       pA("",    20) + pA("",    20) + pA("",    20) +
       bodega +
       pA("",    10) +
@@ -319,11 +329,11 @@ function buildXML3b(
       pA("",   255) + pA("",  2000) +
       pA("",    40) +
       pA(row.UNIDAD_PRODUCTO,  4) +
-      pN(nroRegPadre,      10)                            // f_nro_reg_item_padre
+      pN(nroRegPadre,      10)                                 // f_nro_reg_item_padre
     );
   });
 
-  const closingNum = rows.length + 3;
+  const closingNum = rowsOrdenadas.length + 3;
   const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
   return [opening, encabezado, ...productLines, closing].join("\n");
 }
@@ -614,7 +624,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
             // ── Paso 5b: EPG OPG2 ───────────────────────────────────────
             try {
-              xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre);
+              xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS);
               await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
               entregaOpg2Result = await callSoap(xml3b);
             } catch (e) { entregaOpg2Result = mkErr(e); }

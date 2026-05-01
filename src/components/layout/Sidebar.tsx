@@ -68,7 +68,7 @@ const exportGroups = [
     ),
     children: [
       { label: "Beneficio",           href: "/dashboard/export-produccion/beneficio" },
-      { label: "Desprese",            href: "/dashboard/export-produccion/desprese" },
+      { label: "Con Prod. en Proceso", href: "/dashboard/export-produccion/produccion-cpp" },
       { label: "Sin Prod. en Proceso", href: "/dashboard/export-produccion/produccion-spp" },
       { label: "Historial de baches", href: "/dashboard/export-produccion/historial-baches" },
     ],

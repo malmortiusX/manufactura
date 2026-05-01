@@ -1,5 +1,5 @@
 "use client";
-// src/app/dashboard/export-produccion/desprese/[id]/page.tsx
+// src/app/dashboard/export-produccion/produccion-cpp/[id]/page.tsx
 // Proceso Desprese (dos OPGs en cascada):
 //   OPG1: OP con productos filtrados → consulta componentes → suma PI00001
 //   OPG2: OP para PI00001 (subproducto) → SPG (consumo OPG2) → EPG (entrega PI)
@@ -647,6 +647,12 @@ export default function DesPreseDetailPage() {
 
     // Filas de consumo seleccionadas por el usuario
     const rowsConsumoSeleccionadas = rowsConsumo.filter((_, i) => selectedConsumoIdx.has(i));
+
+    if (!esReintento && rowsConsumoSeleccionadas.length === 0) {
+      setTransmitError("Debe seleccionar al menos un registro de la tabla CONSUMO OPG2 antes de transmitir.");
+      return;
+    }
+
     if (esReintento) setRetrying(true);
     else {
       setTransmitting(true);
