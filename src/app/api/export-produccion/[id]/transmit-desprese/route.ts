@@ -486,8 +486,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       lotesPorProducto: Record<string, string>;
       rows:             RowXml3[];
       rowsConsumo:      RowXml3[];
+      logId1?:          number;
     };
-    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [] } = body;
+    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [], logId1 } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
@@ -509,19 +510,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const PP_CODIGOS = ppCodigo ? [ppCodigo] : [];
     const PP_CON_LOTE = ppCodigo ? [ppCodigo] : [];
 
-    // ── Crear log inicial OPG1 ─────────────────────────────────────────────
-    const log1 = await prisma.opgLog.create({
-      data: {
-        tipoDocumento:           "OPG",
-        numeroOpg:               consecOpg1,
-        numeroBache:             String(bache),
-        filtroId,
-        xml1,
-        estadoOrdenProduccion:   "PENDIENTE",
-        estadoConsumoProduccion: "PENDIENTE",
-        estadoEntregaProduccion: "PENDIENTE",
-      },
-    });
+    // ── Crear o reutilizar log inicial OPG1 ───────────────────────────────
+    // Si logId1 viene del cliente, el log ya fue creado al marcar el bache
+    // con estados PENDIENTE. Solo se actualiza el xml1 y se incrementan intentos.
+    let log1Id: number;
+    if (logId1) {
+      log1Id = logId1;
+      await prisma.opgLog.update({
+        where: { id: log1Id },
+        data:  { xml1, intentos: { increment: 1 } },
+      });
+    } else {
+      const newLog = await prisma.opgLog.create({
+        data: {
+          tipoDocumento:           "OPG",
+          numeroOpg:               consecOpg1,
+          numeroBache:             String(bache),
+          filtroId,
+          xml1,
+          estadoOrdenProduccion:   "PENDIENTE",
+          estadoConsumoProduccion: "PENDIENTE",
+          estadoEntregaProduccion: "PENDIENTE",
+        },
+      });
+      log1Id = newLog.id;
+    }
 
     // Resultados
     let ordenOpg1Result:   DocResult = PENDIENTE;
@@ -710,7 +723,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (puedeOpg1Phase && opg1Componentes.length > 0) {
         try {
           xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes.filter((c) => c.cantidadPendiente1 > 0), PP_CON_LOTE);
-          await prisma.opgLog.update({ where: { id: log1.id }, data: { xml2 } });
+          await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
           consumoOpg1Result = await callSoap(xml2);
         } catch (e) { consumoOpg1Result = mkErr(e); }
 
@@ -718,7 +731,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (consumoOpg1Result.exitoso) {
           try {
             xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rows, filtro.bodegaItemPadre);
-            await prisma.opgLog.update({ where: { id: log1.id }, data: { xml3 } });
+            await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
             entregaOpg1Result = await callSoap(xml3);
           } catch (e) { entregaOpg1Result = mkErr(e); }
         }
@@ -731,7 +744,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       r.exitoso ? "ENVIADO" : (r.printTipoError === -1 && !depOk ? "PENDIENTE" : "ERROR");
 
     await prisma.opgLog.update({
-      where: { id: log1.id },
+      where: { id: log1Id },
       data: {
         xml2,
         xml3,
@@ -769,7 +782,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
 
     return NextResponse.json({
-      logId1:    log1.id,
+      logId1:    log1Id,
       logId2:    log2Id || null,
       opg1Num:   consecOpg1,
       opg2Num:   consecOpg2,
