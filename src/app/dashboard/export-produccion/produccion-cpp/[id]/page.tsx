@@ -32,6 +32,7 @@ interface Filtro {
   instalacion: string | null;
   bodegaItemPadre: string | null;
   tipoDoctoOrden: string | null;
+  productosSinLote: string | null;
 }
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";
@@ -171,7 +172,7 @@ function buildXMLLotes(rows: ProductRow[], fecha: string): string {
 }
 
 // ── XML1 — OPG1 (clase_op=002) ────────────────────────────────────────────
-function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number): string {
+function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number, sinLoteSet: Set<string>): string {
   const fecha   = fechaYMD(filtro.fecha);
   const lote    = loteJuliano(fecha);
   const opening = "000000100000001001";
@@ -193,27 +194,30 @@ function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number): stri
     pA("",                             3) + pA("", 3) +
     pN(0,   8);
 
-  const productLines = rowsOpg1.map((row, i) =>
-    pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
-    pA(filtro.centroOperacion,         3) +
-    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
-    pN(consecOpg, 8) +
-    pN(i + 1,                  10) +
-    pN(0,      7) +
-    pA(row.CODIGO_PRODUCTO,    50) +
-    pA("",    20) + pA("", 20) + pA("", 20) +
-    pA(row.UNIDAD_PRODUCTO,     4) +
-    pN(100,    8) +
-    pQ(Number(row.KIL), 15, 4) +
-    pA(fecha,                   8) +
-    pA(fecha,                   8) +
-    pA("0001",                  4) +
-    pA("",                      5) +
-    pA("",                      4) +
-    pA(lote,                   15) +
-    pA("",                   2000) +
-    pA(filtro.bodegaItemPadre ?? "", 5)
-  );
+  const productLines = rowsOpg1.map((row, i) => {
+    const esSinLote = sinLoteSet.has(row.CODIGO_PRODUCTO.trim());
+    return (
+      pN(i + 3,  7) + pN(851, 4) + pN(0, 2) + pN(1, 2) + pN(1, 3) +
+      pA(filtro.centroOperacion,         3) +
+      pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
+      pN(consecOpg, 8) +
+      pN(i + 1,                  10) +
+      pN(0,      7) +
+      pA(row.CODIGO_PRODUCTO,    50) +
+      pA("",    20) + pA("", 20) + pA("", 20) +
+      pA(row.UNIDAD_PRODUCTO,     4) +
+      pN(100,    8) +
+      pQ(Number(row.KIL), 15, 4) +
+      pA(fecha,                   8) +
+      pA(fecha,                   8) +
+      pA("0001",                  4) +
+      pA("",                      5) +
+      pA("",                      4) +
+      pA(esSinLote ? "" : lote,  15) +
+      pA("",                   2000) +
+      pA(filtro.bodegaItemPadre ?? "", 5)
+    );
+  });
 
   const closing = pN(rowsOpg1.length + 3, 7) + "9999" + "00" + "01" + "001";
   return [opening, header, ...productLines, closing].join("\n");
@@ -222,8 +226,19 @@ function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number): stri
 // ── Componente: bloque XML con copiar ─────────────────────────────────────
 function XmlBlock({ title, content }: { title: string; content: string }) {
   const [copied, setCopied] = useState(false);
-  function handleCopy() {
-    navigator.clipboard.writeText(content);
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = content;
+      ta.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -663,13 +678,18 @@ export default function DesPreseDetailPage() {
 
     try {
       // ── Paso 1: Crear/verificar lotes (productos principales + consumo) ──
-      const loteJul = loteJuliano(fechaYMD(filtro.fecha));
+      const loteJul  = loteJuliano(fechaYMD(filtro.fecha));
+      const sinLote  = new Set<string>(
+        (filtro.productosSinLote ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+      );
       const uniqueLotes: ProductoLote[] = Array.from(new Map([
-        // Lotes Julian — para la orden OPG1 (850/851)
-        ...rowsOpg1.map((r): [string, ProductoLote] => [
-          `${r.CODIGO_PRODUCTO.trim()}|${loteJul}`,
-          { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
-        ]),
+        // Lotes Julian — para la orden OPG1 (850/851); omitir productos sin lote
+        ...rowsOpg1
+          .filter((r) => !sinLote.has(r.CODIGO_PRODUCTO.trim()))
+          .map((r): [string, ProductoLote] => [
+            `${r.CODIGO_PRODUCTO.trim()}|${loteJul}`,
+            { codigo: r.CODIGO_PRODUCTO.trim(), lote: loteJul },
+          ]),
         // Lotes originales de BD — para la entrega EPG OPG1
         ...rows
           .filter((r) => r.LOTE_PRODUCTO?.trim())
@@ -713,7 +733,7 @@ export default function DesPreseDetailPage() {
       setConsecOpg1(nuevoConsec1);
 
       // ── Paso 3: Construir XMLs y transmitir ──────────────────────────────
-      const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1);
+      const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1, sinLote);
       setXmlsPreview({ xmlLotes: xmlLotesEnviado, xml1: xml1Final });
 
       const lotesPorProducto: Record<string, string> = {};
@@ -724,7 +744,7 @@ export default function DesPreseDetailPage() {
 
       const rowsParaXml3 = rows.map((r) => ({
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
-        LOTE_PRODUCTO:   r.LOTE_PRODUCTO,
+        LOTE_PRODUCTO:   sinLote.has(r.CODIGO_PRODUCTO.trim()) ? "" : r.LOTE_PRODUCTO,
         BODEGA:          r.BODEGA,
         UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
         KIL:             Number(r.KIL),
