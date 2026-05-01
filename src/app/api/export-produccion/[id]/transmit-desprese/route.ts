@@ -640,7 +640,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               );
             } else {
               const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
-              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
+              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), {}, []);
             }
             await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
             consumoOpg2Result = await callSoap(xml2b);
@@ -709,7 +709,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Depende de: EPG OPG2 exitosa (si había PP) o de OPG1 directamente (si no había PP)
       if (puedeOpg1Phase && opg1Componentes.length > 0) {
         try {
-          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, PP_CON_LOTE);
+          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes.filter((c) => c.cantidadPendiente1 > 0), PP_CON_LOTE);
           await prisma.opgLog.update({ where: { id: log1.id }, data: { xml2 } });
           consumoOpg1Result = await callSoap(xml2);
         } catch (e) { consumoOpg1Result = mkErr(e); }
