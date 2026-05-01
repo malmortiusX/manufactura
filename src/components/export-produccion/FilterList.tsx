@@ -436,16 +436,16 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
             </div>
           </div>
 
-          {modulo === "produccion-cpp" && (
+          {(modulo === "produccion-cpp" || modulo === "produccion-spp") && (
             <>
               <div className="my-6 border-t border-slate-100" />
               <div className="mb-4">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+                  <span className={`w-2 h-2 rounded-full inline-block ${modulo === "produccion-spp" ? "bg-indigo-400" : "bg-amber-400"}`} />
                   Consumo
                 </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-amber-100">
+              <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 ${modulo === "produccion-spp" ? "border-indigo-100" : "border-amber-100"}`}>
                 <Field label="Bodega" name="bodegaConsumo" value={form.bodegaConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: BOD02" />
                 <Field label="Ubicación" name="ubicacionConsumo" value={form.ubicacionConsumo} onChange={handleChange} maxLength={10} placeholder="Ej: B-01" />
                 <Field label="Tipo Documento" name="tipoDocumentoConsumo" value={form.tipoDocumentoConsumo} onChange={handleChange} maxLength={3} placeholder="Ej: FAC" />

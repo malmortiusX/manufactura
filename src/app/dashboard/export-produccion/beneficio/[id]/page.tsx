@@ -501,7 +501,7 @@ function XmlsPreview({ preview }: { preview: { xmlLotes: string; xml1: string } 
       </button>
       {open && (
         <div className="p-5 space-y-4">
-          <XmlBlock title="XML Lotes (403)" content={preview.xmlLotes} />
+          {preview.xmlLotes && <XmlBlock title="XML Lotes (403)" content={preview.xmlLotes} />}
           <XmlBlock title="XML OPG1 — Orden" content={preview.xml1} />
         </div>
       )}
@@ -582,6 +582,7 @@ export default function BeneficioDetailPage() {
   const [retrying, setRetrying]             = useState(false);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
   const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
+  const [logId1, setLogId1]                 = useState<number | null>(null);
 
   const cargarDatos = useCallback(async () => {
     if (_cargando.has(id)) return;
@@ -596,16 +597,47 @@ export default function BeneficioDetailPage() {
     setTransmitError(null);
     setLotesResult(null);
     setXmlsPreview(null);
+    setLogId1(null);
+    setConsecOpg1(0);
     try {
       const res  = await fetch(`/api/export-produccion/${id}/results`, { method: "POST" });
       const text = await res.text();
       if (!text) throw new Error("El servidor no devolvió respuesta");
       const data = JSON.parse(text);
       if (!res.ok) throw new Error(data.error ?? "Error al cargar los datos");
-      setFiltro(data.filtro);
-      setBache(data.bache);
+
+      const filtroData:   Filtro    = data.filtro;
+      const bacheData:    number    = data.bache;
+      const rowsOpg1Data: RowOpg1[] = data.rowsOpg1 ?? [];
+
+      setFiltro(filtroData);
+      setBache(bacheData);
       setRows(data.rows);
-      setRowsOpg1(data.rowsOpg1 ?? []);
+      setRowsOpg1(rowsOpg1Data);
+
+      // ── Inicializar log al marcar el bache ────────────────────────────
+      // El OpgLog se crea aquí con estados PENDIENTE, antes de transmitir.
+      if (bacheData && filtroData) {
+        try {
+          const initRes  = await fetch(`/api/export-produccion/${id}/init-log`, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ bache: bacheData }),
+          });
+          const initText = await initRes.text();
+          if (initText && initRes.ok) {
+            const { logId, consecOpg } = JSON.parse(initText) as { logId: number; consecOpg: number };
+            setLogId1(logId);
+            setConsecOpg1(consecOpg);
+            // Vista previa del XML1 disponible antes de transmitir
+            const sinLote = new Set<string>(
+              (filtroData.productosSinLote ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+            );
+            const xml1Preview = buildXML1(filtroData, rowsOpg1Data, consecOpg, sinLote);
+            setXmlsPreview({ xmlLotes: "", xml1: xml1Preview });
+          }
+        } catch { /* init-log falló; el log se creará durante la transmisión */ }
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -671,18 +703,26 @@ export default function BeneficioDetailPage() {
         // pueden ya existir en el ERP aunque no estén en nuestra DB.
       }
 
-      // ── Paso 2: Obtener consecutivo OPG1 ────────────────────────────────
-      const seqRes  = await fetch("/api/export-produccion/seq-opg", { method: "POST" });
-      const seqText = await seqRes.text();
-      if (!seqText) throw new Error("Sin respuesta al obtener SEQ_OPG");
-      const seqData = JSON.parse(seqText);
-      if (!seqRes.ok) throw new Error(seqData.error ?? "Error al obtener SEQ_OPG");
-      const nuevoConsec1: number = seqData.consecOpg;
-      setConsecOpg1(nuevoConsec1);
+      // ── Paso 2: Usar consecOpg1 obtenido al marcar el bache ─────────────
+      // Si init-log falló al cargar la página, obtener el consecutivo ahora.
+      let nuevoConsec1 = consecOpg1;
+      if (!nuevoConsec1) {
+        const seqRes  = await fetch("/api/export-produccion/seq-opg", { method: "POST" });
+        const seqText = await seqRes.text();
+        if (!seqText) throw new Error("Sin respuesta al obtener SEQ_OPG");
+        const seqData = JSON.parse(seqText);
+        if (!seqRes.ok) throw new Error(seqData.error ?? "Error al obtener SEQ_OPG");
+        nuevoConsec1 = seqData.consecOpg as number;
+        setConsecOpg1(nuevoConsec1);
+      }
 
-      // ── Paso 3: Construir XMLs y mostrar preview ─────────────────────────
+      // ── Paso 3: Construir XMLs y actualizar preview ──────────────────────
       const xml1Final = buildXML1(filtro, rowsOpg1, nuevoConsec1, sinLote);
-      setXmlsPreview({ xmlLotes: xmlLotesEnviado, xml1: xml1Final });
+      // Actualizar solo el xmlLotes; el xml1 ya estaba en preview desde cargarDatos
+      setXmlsPreview((prev) => ({
+        xml1:     prev?.xml1 ?? xml1Final,
+        xmlLotes: xmlLotesEnviado,
+      }));
 
       const lotesPorProducto: Record<string, string> = {};
       rowsOpg1.forEach((r) => {
@@ -710,6 +750,7 @@ export default function BeneficioDetailPage() {
           xml1:            xml1Final,
           lotesPorProducto,
           rows:            rowsParaXml3,
+          logId1:          logId1 ?? undefined,
         }),
       });
       const text = await res.text();
@@ -723,7 +764,7 @@ export default function BeneficioDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsOpg1]);
+  }, [id, bache, filtro, rows, rowsOpg1, consecOpg1, logId1]);
 
   const tr = transmitResult;
 
