@@ -750,7 +750,9 @@ export default function BeneficioDetailPage() {
           xml1:            xml1Final,
           lotesPorProducto,
           rows:            rowsParaXml3,
-          logId1:          logId1 ?? undefined,
+          logId1:          logId1              ?? undefined,
+          logId2:          tr?.logId2          ?? undefined,
+          prevConsecOpg2:  (tr?.opg2Num ?? 0) > 0 ? tr!.opg2Num : undefined,
         }),
       });
       const text = await res.text();

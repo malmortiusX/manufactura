@@ -446,8 +446,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       lotesPorProducto: Record<string, string>;
       rows:             RowXml3[];
       logId1?:          number;
+      logId2?:          number;   // ID log OPG2 ya creado en intento previo
+      prevConsecOpg2?:  number;   // consecutivo OPG2 ya asignado en intento previo
     };
-    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], logId1 } = body;
+    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], logId1,
+            logId2: bodyLogId2, prevConsecOpg2 } = body;
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
@@ -486,6 +489,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       log1Id = log1.id;
     }
 
+    // ── Cargar estados actuales de los logs para poder saltar pasos ya enviados ──
+    // Esto permite que un reintento continúe desde el punto de fallo en lugar
+    // de empezar desde cero y re-enviar documentos que ya están en el ERP.
+    const log1State = await prisma.opgLog.findUnique({
+      where:  { id: log1Id },
+      select: {
+        estadoOrdenProduccion:      true, estadoConsumoProduccion:      true, estadoEntregaProduccion:      true,
+        respuestaOrdenProduccion:   true, respuestaConsumoProduccion:   true, respuestaEntregaProduccion:   true,
+        xml2: true, xml3: true,
+      },
+    });
+    const log2State = bodyLogId2 ? await prisma.opgLog.findUnique({
+      where:  { id: bodyLogId2 },
+      select: {
+        estadoOrdenProduccion:      true, estadoConsumoProduccion:      true, estadoEntregaProduccion:      true,
+        respuestaOrdenProduccion:   true, respuestaConsumoProduccion:   true, respuestaEntregaProduccion:   true,
+        xml1: true, xml2: true, xml3: true,
+      },
+    }) : null;
+
+    // Helper: resultado ficticio para un paso que ya fue enviado exitosamente
+    const skip = (respuesta: string | null | undefined = ""): DocResult => ({
+      exitoso: true, printTipoError: -1, errores: [], respuestaRaw: respuesta ?? "",
+    });
+
     // Resultados
     let ordenOpg1Result:   DocResult = PENDIENTE;
     let ordenOpg2Result:   DocResult = PENDIENTE;
@@ -494,25 +522,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let consumoOpg1Result: DocResult = PENDIENTE;
     let entregaOpg1Result: DocResult = PENDIENTE;
 
-    let consecOpg2          = 0;
-    let xml1b               = "";
-    let xml2b               = "";
-    let xml3b               = "";
-    let xml2                = "";
-    let xml3                = "";
-    let xmlLotesEpgOpg2     = "";
+    // Inicializar desde el log previo cuando es un reintento
+    let consecOpg2      = bodyLogId2 ? (prevConsecOpg2 ?? 0) : 0;
+    let xml1b           = log2State?.xml1 ?? "";
+    let xml2b           = log2State?.xml2 ?? "";
+    let xml3b           = log2State?.xml3 ?? "";
+    let xml2            = log1State?.xml2  ?? "";
+    let xml3            = log1State?.xml3  ?? "";
+    let xmlLotesEpgOpg2 = "";
 
     let opg1Componentes: ComponenteOP[] = [];
-    let ppItems:         PpItem[]       = [];   // solo PP00002 → decide si crear OPG2
-    let ppEntregaItems:  PpItem[]       = [];   // PP00001+PP00002+PP00003 → van en EPG OPG2
-    let log2Id = 0;
+    let ppItems:         PpItem[]       = [];   // solo PP_CODIGOS → decide si crear OPG2
+    let ppEntregaItems:  PpItem[]       = [];   // PP_CON_LOTE → van en EPG OPG2
+    let log2Id = bodyLogId2 ?? 0;
 
     const mkErr = (e: unknown): DocResult =>
       ({ exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) });
 
-    // ── Paso 1: Enviar XML1 → OPG1 ───────────────────────────────────────
-    try { ordenOpg1Result = await callSoap(xml1); }
-    catch (e) { ordenOpg1Result = mkErr(e); }
+    // ── Paso 1: Enviar XML1 → OPG1 (saltar si ya fue enviado) ────────────
+    if (log1State?.estadoOrdenProduccion === "ENVIADO") {
+      ordenOpg1Result = skip(log1State.respuestaOrdenProduccion);
+    } else {
+      try { ordenOpg1Result = await callSoap(xml1); }
+      catch (e) { ordenOpg1Result = mkErr(e); }
+    }
 
     if (ordenOpg1Result.exitoso) {
 
@@ -552,53 +585,77 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Si no hay PP, se salta directamente a SPG/EPG de OPG1.
       let puedeOpg1Phase = ppItems.length === 0;   // true cuando no hay OPG2
 
-      if (ppItems.length > 0) {
+      if (ppItems.length > 0 || (bodyLogId2 && prevConsecOpg2)) {
 
         // ── Paso 2b: Crear lotes PP (después de OPG1, antes de OPG2) ───────
-        try {
-          const ppLotes: ProductoLote[] = ppItems.map((p) => ({ codigo: p.codigo, lote: p.lote }));
-          const existentes = await prisma.loteCreado.findMany({
-            where:  { OR: ppLotes.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })) },
-            select: { codigoProducto: true, lote: true },
-          });
-          const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
-          const lotesNuevos  = ppLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
-          if (lotesNuevos.length > 0) {
-            await enviarLotesIndividual(lotesNuevos, fecha);
-          }
-        } catch { /* continuar aunque falle la creación de lotes PP */ }
+        if (ppItems.length > 0) {
+          try {
+            const ppLotes: ProductoLote[] = ppItems.map((p) => ({ codigo: p.codigo, lote: p.lote }));
+            const existentes = await prisma.loteCreado.findMany({
+              where:  { OR: ppLotes.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })) },
+              select: { codigoProducto: true, lote: true },
+            });
+            const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
+            const lotesNuevos  = ppLotes.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
+            if (lotesNuevos.length > 0) {
+              await enviarLotesIndividual(lotesNuevos, fecha);
+            }
+          } catch { /* continuar aunque falle la creación de lotes PP */ }
+        }
 
         // ── Paso 3: Construir y enviar XML1b → OPG2 ─────────────────────
-        consecOpg2 = await nextConsecOpg();
-        xml1b = buildXML1b(
-          co, filtro.nombre, fecha, consecOpg2, ppItems,
-          filtro.terceroPlanificador?.trim() ?? "",
-          filtro.instalacion?.trim()          ?? "",
-          filtro.bodegaItemPadre?.trim()       ?? "",
-          filtro.tipoDoctoOrden?.trim()        ?? "OPG",
-        );
-        const log2 = await prisma.opgLog.create({
-          data: {
-            tipoDocumento: "OPG", numeroOpg: consecOpg2,
-            numeroBache: String(bache), filtroId, xml1: xml1b,
-            estadoOrdenProduccion: "PENDIENTE", estadoConsumoProduccion: "PENDIENTE",
-            estadoEntregaProduccion: "PENDIENTE",
-          },
-        });
-        log2Id = log2.id;
+        if (!bodyLogId2) {
+          // Primera transmisión: asignar consecutivo y crear log OPG2
+          consecOpg2 = await nextConsecOpg();
+          xml1b = buildXML1b(
+            co, filtro.nombre, fecha, consecOpg2, ppItems,
+            filtro.terceroPlanificador?.trim() ?? "",
+            filtro.instalacion?.trim()          ?? "",
+            filtro.bodegaItemPadre?.trim()       ?? "",
+            filtro.tipoDoctoOrden?.trim()        ?? "OPG",
+          );
+          const log2 = await prisma.opgLog.create({
+            data: {
+              tipoDocumento: "OPG", numeroOpg: consecOpg2,
+              numeroBache: String(bache), filtroId, xml1: xml1b,
+              estadoOrdenProduccion: "PENDIENTE", estadoConsumoProduccion: "PENDIENTE",
+              estadoEntregaProduccion: "PENDIENTE",
+            },
+          });
+          log2Id = log2.id;
+        } else if (log2State?.estadoOrdenProduccion !== "ENVIADO" && ppItems.length > 0) {
+          // Reintento: OPG2 existe pero su orden no fue enviada → reconstruir XML1b
+          xml1b = buildXML1b(
+            co, filtro.nombre, fecha, consecOpg2, ppItems,
+            filtro.terceroPlanificador?.trim() ?? "",
+            filtro.instalacion?.trim()          ?? "",
+            filtro.bodegaItemPadre?.trim()       ?? "",
+            filtro.tipoDoctoOrden?.trim()        ?? "OPG",
+          );
+          await prisma.opgLog.update({ where: { id: log2Id }, data: { xml1: xml1b } });
+        }
 
-        try { ordenOpg2Result = await callSoap(xml1b); }
-        catch (e) { ordenOpg2Result = mkErr(e); }
+        // Enviar orden OPG2 (o saltar si ya fue enviada)
+        if (log2State?.estadoOrdenProduccion === "ENVIADO") {
+          ordenOpg2Result = skip(log2State.respuestaOrdenProduccion);
+        } else {
+          try { ordenOpg2Result = await callSoap(xml1b); }
+          catch (e) { ordenOpg2Result = mkErr(e); }
+        }
 
         if (ordenOpg2Result.exitoso) {
 
-          // ── Paso 4: SPG OPG2 ──────────────────────────────────────────
-          try {
-            const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
-            xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
-            await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
-            consumoOpg2Result = await callSoap(xml2b);
-          } catch (e) { consumoOpg2Result = mkErr(e); }
+          // ── Paso 4: SPG OPG2 (saltar si ya fue enviado) ───────────────
+          if (log2State?.estadoConsumoProduccion === "ENVIADO") {
+            consumoOpg2Result = skip(log2State.respuestaConsumoProduccion);
+          } else {
+            try {
+              const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
+              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
+              await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
+              consumoOpg2Result = await callSoap(xml2b);
+            } catch (e) { consumoOpg2Result = mkErr(e); }
+          }
 
           if (consumoOpg2Result.exitoso) {
 
@@ -635,12 +692,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               }
             } catch { /* continuar aunque falle la creación de lotes */ }
 
-            // ── Paso 5b: EPG OPG2 ───────────────────────────────────────
-            try {
-              xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS);
-              await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
-              entregaOpg2Result = await callSoap(xml3b);
-            } catch (e) { entregaOpg2Result = mkErr(e); }
+            // ── Paso 5b: EPG OPG2 (saltar si ya fue enviado) ────────────
+            if (log2State?.estadoEntregaProduccion === "ENVIADO") {
+              entregaOpg2Result = skip(log2State.respuestaEntregaProduccion);
+            } else {
+              try {
+                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS);
+                await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
+                entregaOpg2Result = await callSoap(xml3b);
+              } catch (e) { entregaOpg2Result = mkErr(e); }
+            }
 
             // Solo si EPG OPG2 fue exitosa se puede continuar con OPG1
             if (entregaOpg2Result.exitoso) {
@@ -669,11 +730,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // ── Paso 6: SPG OPG1 ─────────────────────────────────────────────────
       // Depende de: EPG OPG2 exitosa (si había PP) o de OPG1 directamente (si no había PP)
       if (puedeOpg1Phase && opg1Componentes.length > 0) {
-        try {
-          xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, ppEntregaItems, PP_CON_LOTE);
-          await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
-          consumoOpg1Result = await callSoap(xml2);
-        } catch (e) { consumoOpg1Result = mkErr(e); }
+        // ── Paso 6: SPG OPG1 (saltar si ya fue enviado) ──────────────────
+        if (log1State?.estadoConsumoProduccion === "ENVIADO") {
+          consumoOpg1Result = skip(log1State.respuestaConsumoProduccion);
+        } else {
+          try {
+            xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, ppEntregaItems, PP_CON_LOTE);
+            await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
+            consumoOpg1Result = await callSoap(xml2);
+          } catch (e) { consumoOpg1Result = mkErr(e); }
+        }
 
         // ── Paso 7: Crear lotes de productos entrega antes de EPG OPG1 ──────
         if (consumoOpg1Result.exitoso) {
@@ -701,21 +767,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             }
           } catch { /* continuar aunque falle la creación de lotes */ }
 
-          // ── Paso 8: EPG OPG1 ────────────────────────────────────────────
-          try {
-            const sinCantAdicional = new Set(
-              (filtro.productosSinCantAdicional ?? "")
-                .split(",").map((s) => s.trim()).filter(Boolean)
-            );
-            const rowsEpg1 = rows.map((r) =>
-              sinCantAdicional.has(r.CODIGO_PRODUCTO.trim())
-                ? { ...r, UND: 0 }
-                : r
-            );
-            xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre);
-            await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
-            entregaOpg1Result = await callSoap(xml3);
-          } catch (e) { entregaOpg1Result = mkErr(e); }
+          // ── Paso 8: EPG OPG1 (saltar si ya fue enviado) ─────────────────
+          if (log1State?.estadoEntregaProduccion === "ENVIADO") {
+            entregaOpg1Result = skip(log1State.respuestaEntregaProduccion);
+          } else {
+            try {
+              const sinCantAdicional = new Set(
+                (filtro.productosSinCantAdicional ?? "")
+                  .split(",").map((s) => s.trim()).filter(Boolean)
+              );
+              const rowsEpg1 = rows.map((r) =>
+                sinCantAdicional.has(r.CODIGO_PRODUCTO.trim())
+                  ? { ...r, UND: 0 }
+                  : r
+              );
+              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre);
+              await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
+              entregaOpg1Result = await callSoap(xml3);
+            } catch (e) { entregaOpg1Result = mkErr(e); }
+          }
         }
       }
 
