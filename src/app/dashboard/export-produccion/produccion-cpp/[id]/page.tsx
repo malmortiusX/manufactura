@@ -19,6 +19,9 @@ interface ProductRow {
   KIL: number;
   UND: number;
   PROMEDIO_PESO: number;
+  NRODCTO: string;
+  TIPODCTO: string;
+  ORIGEN: string;
 }
 
 interface Filtro {
@@ -795,9 +798,13 @@ export default function DesPreseDetailPage() {
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
         LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
         BODEGA:          r.BODEGA,
+        UBICACION:       r.UBICACION ?? "",
         UNIDAD_PRODUCTO: r.UNIDAD_PRODUCTO,
         KIL:             Number(r.KIL),
         UND:             Number(r.UND),
+        NRODCTO:         r.NRODCTO ?? "",
+        TIPODCTO:        r.TIPODCTO ?? "",
+        ORIGEN:          r.ORIGEN ?? "",
       }));
 
       const res  = await fetch(`/api/export-produccion/${id}/transmit-desprese`, {
@@ -1189,13 +1196,14 @@ export default function DesPreseDetailPage() {
                   <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">U/M</th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Kilogramos</th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Unidades</th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Peso Promedio</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading
                   ? Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="animate-pulse">
-                        {Array.from({ length: 7 }).map((__, j) => (
+                        {Array.from({ length: 8 }).map((__, j) => (
                           <td key={j} className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-3/4" /></td>
                         ))}
                       </tr>
@@ -1213,6 +1221,9 @@ export default function DesPreseDetailPage() {
                         </td>
                         <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.KIL))}</td>
                         <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">{fmtNum(Number(row.UND))}</td>
+                        <td className="px-5 py-3 text-right text-slate-700 font-medium tabular-nums">
+                          {fmtNum(Number(row.UND) !== 0 ? Number(row.KIL) / Number(row.UND) : 0)}
+                        </td>
                       </tr>
                     ))}
               </tbody>
@@ -1222,6 +1233,9 @@ export default function DesPreseDetailPage() {
                     <td colSpan={5} className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Total</td>
                     <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">{fmtNum(totalKil)}</td>
                     <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">{fmtNum(totalUnd)}</td>
+                    <td className="px-5 py-3 text-right font-bold text-slate-800 tabular-nums">
+                      {fmtNum(totalUnd !== 0 ? totalKil / totalUnd : 0)}
+                    </td>
                   </tr>
                 </tfoot>
               )}

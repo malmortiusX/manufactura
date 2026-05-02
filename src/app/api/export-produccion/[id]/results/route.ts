@@ -58,6 +58,9 @@ const selectColsIndividual = `
   B.CODIGO    AS CODIGO_PRODUCTO,
   B.NOMBRE    AS DESCRIPCION_PRODUCTO,
   B.CODLOTE   AS LOTE_PRODUCTO,
+  B.Nrodcto   AS NRODCTO,
+  B.Tipodcto  AS TIPODCTO,
+  B.Origen    AS ORIGEN,
   B.bache,
   CASE B.UNDBASE WHEN 'UND' THEN B.CANTEMPAQ ELSE B.CANTIDAD  END AS KIL,
   CASE B.UNDBASE WHEN 'UND' THEN B.CANTIDAD  ELSE B.CANTEMPAQ END AS UND,
@@ -154,20 +157,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       `;
       await tx.$executeRawUnsafe(updateSql);
 
-      // 3. Marcar los registros de consumo con el mismo bache (si aplica)
-      if (hasConsumo) {
-        const updateConsumoSql = `
-          UPDATE B
-          SET    B.bache = ${bache}
-          FROM   Mvdcto B
-          INNER JOIN Dcto A
-            ON  A.Nrodcto  = B.Nrodcto
-            AND A.Origen   = B.Origen
-            AND A.Tipodcto = B.Tipodcto
-          WHERE ${whereConsumo}
-        `;
-        await tx.$executeRawUnsafe(updateConsumoSql);
-      }
+      // 3. Los registros de consumo NO se marcan aquí.
+      //    Solo se marcarán los que el usuario seleccione al pulsar "Transmitir al ERP".
 
       // 4. Consultar registros principales (con condiciones de desambiguación)
       const selectSql = `
@@ -191,14 +182,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       `;
       const rowsOpg1 = await tx.$queryRawUnsafe(selectOpg1Sql);
 
-      // 5. Consultar registros de consumo individualmente (sin GROUP BY)
+      // 5. Consultar registros de consumo disponibles (aún no marcados con bache)
+      //    Se usan los filtros del ExportProduccion, no el bache, porque estos registros
+      //    no se marcan al cargar — solo se marcan los seleccionados al transmitir.
       let rowsConsumo: unknown[] = [];
       if (hasConsumo) {
         const selectConsumoSql = `
           SELECT ${selectColsIndividual}
           FROM Mvdcto B
-          WHERE B.bache = ${bache}
-            AND (B.CANTIDAD <> 0 OR B.CANTEMPAQ <> 0)${consumoExtraWhere}
+          INNER JOIN Dcto A
+            ON  A.Nrodcto  = B.Nrodcto
+            AND A.Origen   = B.Origen
+            AND A.Tipodcto = B.Tipodcto
+          WHERE ${whereConsumo}${consumoExtraWhere}
           ORDER BY ${orderBy}
         `;
         rowsConsumo = await tx.$queryRawUnsafe(selectConsumoSql);

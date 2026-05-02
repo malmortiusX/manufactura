@@ -242,10 +242,19 @@ interface RowXml3 {
   CODIGO_PRODUCTO: string;
   LOTE_PRODUCTO:   string;
   BODEGA:          string;
+  UBICACION?:      string;
   UNIDAD_PRODUCTO: string;
   KIL:             number;
   UND:             number;
+  // Identificadores de registro en Mvdcto — usados para marcar el bache al transmitir
+  NRODCTO?:        string;
+  TIPODCTO?:       string;
+  ORIGEN?:         string;
 }
+
+// Escapa comillas simples para uso en SQL dinámico
+const s = (val: string | null | undefined): string =>
+  (val ?? "").replace(/'/g, "''").trim();
 
 function buildXML3(
   centroOperacion: string,
@@ -534,6 +543,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
       });
       log1Id = newLog.id;
+    }
+
+    // ── Marcar en BD los registros de consumo seleccionados ──────────────────
+    // Solo se marcan los que el usuario seleccionó en la tabla Consumo OPG2.
+    // Los no seleccionados quedan con bache = 0/NULL y aparecerán disponibles
+    // la próxima vez que se ejecute el proceso.
+    if (rowsConsumo.length > 0) {
+      const consumoClauses = rowsConsumo
+        .filter((r) => r.NRODCTO && r.TIPODCTO && r.ORIGEN)
+        .map((r) =>
+          `(B.Nrodcto  = '${s(r.NRODCTO)}'` +
+          ` AND B.Tipodcto = '${s(r.TIPODCTO)}'` +
+          ` AND B.Origen   = '${s(r.ORIGEN)}'` +
+          ` AND B.CODIGO   = '${s(r.CODIGO_PRODUCTO)}'` +
+          ` AND ISNULL(B.CODLOTE,'')   = '${s(r.LOTE_PRODUCTO)}'` +
+          ` AND B.Bodega   = '${s(r.BODEGA)}'` +
+          ` AND ISNULL(B.codubica,'')  = '${s(r.UBICACION ?? "")}')`
+        );
+      if (consumoClauses.length > 0) {
+        const updateBacheSql = `
+          UPDATE B
+          SET    B.bache = ${bache}
+          FROM   Mvdcto B
+          WHERE  (B.bache = 0 OR B.bache IS NULL)
+            AND  (${consumoClauses.join("\n            OR ")})
+        `;
+        await prisma.$executeRawUnsafe(updateBacheSql);
+      }
     }
 
     // Resultados
