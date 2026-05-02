@@ -195,8 +195,8 @@ function buildXML1(
     pA(fecha,                          8) +
     pN(1,   1) + pN(0, 1) + pN(701, 3) +
     pA(filtro.terceroPlanificador,    15) +
-    pA(filtro.tipoDoctoOrden ?? "OPG", 3) +
-    pN(1,   8) +
+    pA("",                             3) +   // f850_id_tipo_docto_op_padre — vacío
+    pN(0,   8) +                              // f850_consec_docto_op_padre  — vacío
     pA(filtro.instalacion,             3) +
     pA("002",                          3) +
     pA("",                            30) + pA("", 30) + pA("", 30) +
