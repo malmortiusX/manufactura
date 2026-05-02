@@ -62,8 +62,8 @@ function buildXML1b(
     pA(fecha,            8) +
     pN(1,   1) + pN(0, 1) + pN(701, 3) +
     pA(terceroPlanificador, 15) +
-    pA(tipoDoctoOrden,   3) +
-    pN(1,   8) +
+    pA("",   3) +
+    pN(0,   8) +
     pA(instalacion,      3) +
     pA("002",            3) +   // clase_op = 002
     pA("",                  30) +
