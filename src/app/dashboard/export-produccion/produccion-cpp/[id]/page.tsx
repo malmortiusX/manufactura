@@ -817,7 +817,9 @@ export default function DesPreseDetailPage() {
           lotesPorProducto,
           rows:            rowsParaXml3,
           rowsConsumo:     rowsConsumoParaXml,
-          logId1:          logId1 ?? undefined,
+          logId1:          logId1              ?? undefined,
+          logId2:          transmitResult?.logId2          ?? undefined,
+          prevConsecOpg2:  (transmitResult?.opg2Num ?? 0) > 0 ? transmitResult!.opg2Num : undefined,
         }),
       });
       const text = await res.text();
@@ -831,7 +833,7 @@ export default function DesPreseDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1]);
+  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1, transmitResult]);
 
   const tr = transmitResult;
 

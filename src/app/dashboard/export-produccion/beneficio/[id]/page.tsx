@@ -766,7 +766,7 @@ export default function BeneficioDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsOpg1, consecOpg1, logId1]);
+  }, [id, bache, filtro, rows, rowsOpg1, consecOpg1, logId1, transmitResult]);
 
   const tr = transmitResult;
 
@@ -900,6 +900,37 @@ export default function BeneficioDetailPage() {
       {/* Resultados transmisión */}
       {tr && (
         <div className="space-y-4">
+          {/* OPG1 — producto principal */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="h-px flex-1 bg-rose-200" />
+              <span className="text-xs font-semibold text-rose-500 uppercase tracking-wider px-2">
+                Fase 2 · Producto principal
+              </span>
+              <div className="h-px flex-1 bg-rose-200" />
+            </div>
+            <OPGPanel
+              titulo="OPG1 — Productos filtrados"
+              num={tr.opg1Num}
+              result={tr.opg1}
+              accent="bg-rose-50 text-rose-600 border-rose-200"
+              retrying={retrying}
+              onReintentarOrden={
+                !tr.opg1.orden.exitoso
+                  ? () => transmitir(true) : undefined
+              }
+              onReintentarConsumo={
+                !tr.opg1.consumo.exitoso && tr.opg1.orden.exitoso &&
+                (tr.opg2Num === 0 || tr.opg2.entrega.exitoso)
+                  ? () => transmitir(true) : undefined
+              }
+              onReintentarEntrega={
+                !tr.opg1.entrega.exitoso && tr.opg1.consumo.exitoso
+                  ? () => transmitir(true) : undefined
+              }
+            />
+          </div>
+
           {/* OPG2 — subproductos PP */}
           {tr.opg2Num > 0 && (
             <div className="space-y-3">
@@ -931,37 +962,6 @@ export default function BeneficioDetailPage() {
               />
             </div>
           )}
-
-          {/* OPG1 — producto principal */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 px-1">
-              <div className="h-px flex-1 bg-rose-200" />
-              <span className="text-xs font-semibold text-rose-500 uppercase tracking-wider px-2">
-                Fase 2 · Producto principal
-              </span>
-              <div className="h-px flex-1 bg-rose-200" />
-            </div>
-            <OPGPanel
-              titulo="OPG1 — Productos filtrados"
-              num={tr.opg1Num}
-              result={tr.opg1}
-              accent="bg-rose-50 text-rose-600 border-rose-200"
-              retrying={retrying}
-              onReintentarOrden={
-                !tr.opg1.orden.exitoso
-                  ? () => transmitir(true) : undefined
-              }
-              onReintentarConsumo={
-                !tr.opg1.consumo.exitoso && tr.opg1.orden.exitoso &&
-                (tr.opg2Num === 0 || tr.opg2.entrega.exitoso)
-                  ? () => transmitir(true) : undefined
-              }
-              onReintentarEntrega={
-                !tr.opg1.entrega.exitoso && tr.opg1.consumo.exitoso
-                  ? () => transmitir(true) : undefined
-              }
-            />
-          </div>
         </div>
       )}
 
