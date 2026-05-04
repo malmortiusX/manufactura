@@ -143,6 +143,19 @@ function sumarDias(fechaStr: string, dias: number): string {
   ].join("");
 }
 
+function trimStart(str: string, char: string): string {
+  if (char.length !== 1) {
+    throw new Error("El carácter de referencia debe ser exactamente un carácter");
+  }
+
+  let i = 0;
+  while (i < str.length && str[i] === char) {
+    i++;
+  }
+
+  return str.slice(i);
+}
+
 // ── XML Lotes (tipo 403) ──────────────────────────────────────────────────
 function buildXMLLotes(rows: ProductRow[], fecha: string): string {
   const productos = Array.from(
@@ -206,7 +219,7 @@ function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number, sinLo
       pN(consecOpg, 8) +
       pN(i + 1,                  10) +
       pN(0,      7) +
-      pA(row.CODIGO_PRODUCTO,    50) +
+      pA(trimStart(row.CODIGO_PRODUCTO, "0"),    50) +
       pA("",    20) + pA("", 20) + pA("", 20) +
       pA(row.UNIDAD_PRODUCTO,     4) +
       pN(100,    8) +

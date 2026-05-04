@@ -36,6 +36,42 @@ function pQ(val: number, intLen: number, dec: number): string {
   return intPart.padStart(intLen, "0") + "." + decPart.padEnd(dec, "0");
 }
 
+function trimStart(str: string, char: string): string {
+  if (char.length !== 1) {
+    throw new Error("El carácter de referencia debe ser exactamente un carácter");
+  }
+
+  let i = 0;
+  while (i < str.length && str[i] === char) {
+    i++;
+  }
+
+  return str.slice(i);
+}
+
+function loteEsMasAntiguo(lote: string, fechaComparar: Date): boolean {
+  if (lote.length !== 5 || !/^\d{5}$/.test(lote)) {
+    throw new Error("El lote debe tener exactamente 5 dígitos numéricos");
+  }
+
+  const diaJuliano = parseInt(lote.substring(0, 3), 10);
+  const anio       = parseInt(lote.substring(3, 5), 10) + 2000;
+
+  if (diaJuliano < 1 || diaJuliano > 366) {
+    throw new Error(`Día juliano inválido: ${diaJuliano}`);
+  }
+
+  // Construir la fecha a partir del día juliano
+  const fechaLote = new Date(anio, 0, 1);         // 1 enero del año
+  fechaLote.setDate(diaJuliano);                  // sumar los días julianos
+
+  // Comparar solo fechas (sin hora)
+  fechaLote.setHours(0, 0, 0, 0);
+  fechaComparar.setHours(0, 0, 0, 0);
+
+  return fechaLote.getTime() < fechaComparar.getTime();
+}
+
 // ── XML1b — Orden de Producción para PI (OPG2) ────────────────────────────
 // Mismo formato que OPG1 (tipo 850/851), pero clase_op=004 ya que PI00001
 // no tiene lista de materiales (permite consumir cualquier producto).
@@ -83,7 +119,7 @@ function buildXML1b(
     pN(consecOpg2,      8) +
     pN(i + 1,          10) +
     pN(0,               7) +
-    pA(item.codigo,    50) +
+    pA(trimStart(item.codigo, "0"),    50) +
     pA("",                20) +
     pA("",                20) +
     pA("",                20) +
@@ -138,7 +174,8 @@ function buildXML2(
 
   const productLines = componentes.map((comp, i) => {
     const esPp    = productoProceso.includes(comp.hijoReferencia.trim());
-    const lotePad = esPp ? loteJul : "";
+    var lotePad = esPp ? loteJul : "";
+
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
       pA(centroOperacion,       3) +
@@ -203,6 +240,8 @@ function buildXML2Consumo(
     pA("OPG", 3) +
     pN(consecOpg, 8);
 
+  const fechaSalida = new Date(2026, 5, 1);
+
   const productLines = rows.map((row, i) =>
     pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
     pA(centroOperacion,      3) +
@@ -214,18 +253,18 @@ function buildXML2Consumo(
     pA("",    20) + pA("",    20) + pA("",    20) +
     pN(0,     10) +
     pN(0,      7) +
-    pA(row.CODIGO_PRODUCTO, 50) +   // hijoReferencia = producto consumido
+    pA(trimStart(row.CODIGO_PRODUCTO, "0"), 50) +   // hijoReferencia = producto consumido
     pA("",    20) + pA("",    20) + pA("",    20) +
     pA(bodegaItemPadre,      5) +   // f470_id_bodega = bodegaItemPadre del filtro
     pA("",    10) +
-    pA(row.LOTE_PRODUCTO,   15) +   // f470_id_lote = lote del producto consumido
+    pA(loteEsMasAntiguo(row.LOTE_PRODUCTO, fechaSalida) ? "P26ERP" : row.LOTE_PRODUCTO,   15) +   // f470_id_lote = lote del producto consumido
     pN(701,    3) +
     pA("01",   2) +
     pA(centroOperacion,      3) +
     pA("31",  20) +
     pA("70010401",          15) +
     pA("",    15) +
-    pA(row.UNIDAD_PRODUCTO,  4) +
+    pA(row.UNIDAD_PRODUCTO.trim() === "KG" ? "KIL" : row.UNIDAD_PRODUCTO,  4) +
     pQ(Number(row.KIL), 15, 4) +
     pQ(Number(row.UND), 15, 4) +
     pA("",   255) +
@@ -295,7 +334,7 @@ function buildXML3(
       pA("OPG",                3) +
       pN(consecOpg,            8) +
       pN(0,      7) +
-      pA(row.CODIGO_PRODUCTO,  50) +
+      pA(trimStart(row.CODIGO_PRODUCTO, "0"),  50) +
       pA("",    20) + pA("",    20) + pA("",    20) +
       pN(0,      7) +
       pA("",    50) + pA("",    20) + pA("",    20) + pA("",    20) +
