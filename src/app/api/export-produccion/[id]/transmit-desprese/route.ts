@@ -172,12 +172,12 @@ function buildXML2(
     pA("OPG", 3) +
     pN(consecOpg, 8);
 
-  const loteInicial = "P26ERP";
+  const loteSaldoInicial = "P26ERP";
   const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"]);
 
   const productLines = componentes.map((comp, i) => {
     const esProductoProceso    = productoProceso.includes(comp.hijoReferencia.trim());
-    const lotePad = esProductoProceso ? (productosLoteQuemado.has(comp.hijoReferencia.trim()) ? loteInicial : loteJul) : "";
+    const lotePad = esProductoProceso ? (productosLoteQuemado.has(comp.hijoReferencia.trim()) ? loteSaldoInicial : loteJul) : (productosLoteQuemado.has(comp.hijoReferencia.trim()) ? loteSaldoInicial : "");
 
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
@@ -244,6 +244,8 @@ function buildXML2Consumo(
     pN(consecOpg, 8);
 
   const fechaSalida = new Date(2026, 4, 1);
+  const loteSaldoInicial = "P26ERP";
+  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"]);
 
   const productLines = rows.map((row, i) =>
     pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
@@ -260,7 +262,7 @@ function buildXML2Consumo(
     pA("",    20) + pA("",    20) + pA("",    20) +
     pA(bodegaItemPadre,      5) +   // f470_id_bodega = bodegaItemPadre del filtro
     pA("",    10) +
-    pA(loteEsMasAntiguo(row.LOTE_PRODUCTO.trim(), fechaSalida) ? "P26ERP" : row.LOTE_PRODUCTO,   15) +   // f470_id_lote = lote del producto consumido
+    pA(loteEsMasAntiguo(row.LOTE_PRODUCTO.trim(), fechaSalida) ? loteSaldoInicial : (productosLoteQuemado.has(row.CODIGO_PRODUCTO.trim()) ? loteSaldoInicial : row.LOTE_PRODUCTO),   15) +   // f470_id_lote = lote del producto consumido
     pN(701,    3) +
     pA("01",   2) +
     pA(centroOperacion,      3) +
