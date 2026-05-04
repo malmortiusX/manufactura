@@ -172,12 +172,12 @@ function buildXML2(
     pA("OPG", 3) +
     pN(consecOpg, 8);
 
-  const productLines = componentes.map((comp, i) => {
-    const esPp    = productoProceso.includes(comp.hijoReferencia.trim());
-    var lotePad = esPp ? loteJul : "";
-    const productosLoteQuemado = ["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"];
+  const loteInicial = "P26ERP";
+  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"]);
 
-    lotePad = productosLoteQuemado.includes(comp.hijoReferencia.trim()) ? "P26ERP" : lotePad;
+  const productLines = componentes.map((comp, i) => {
+    const esProductoProceso    = productoProceso.includes(comp.hijoReferencia.trim());
+    const lotePad = esProductoProceso ? (productosLoteQuemado.has(comp.hijoReferencia.trim()) ? loteInicial : loteJul) : "";
 
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
@@ -203,7 +203,7 @@ function buildXML2(
       pA("",    15) +
       pA(comp.hijoUnidad,       4) +
       pQ(comp.cantidadPendiente1, 15, 4) +
-      pQ(comp.cantidadPendiente2,     15, 4) +
+      pQ(comp.cantidadPendiente2, 15, 4) +
       pA("",   255) +
       pA("",  2000)
     );
@@ -243,7 +243,7 @@ function buildXML2Consumo(
     pA("OPG", 3) +
     pN(consecOpg, 8);
 
-  const fechaSalida = new Date(2026, 5, 1);
+  const fechaSalida = new Date(2026, 4, 1);
 
   const productLines = rows.map((row, i) =>
     pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
@@ -260,14 +260,14 @@ function buildXML2Consumo(
     pA("",    20) + pA("",    20) + pA("",    20) +
     pA(bodegaItemPadre,      5) +   // f470_id_bodega = bodegaItemPadre del filtro
     pA("",    10) +
-    pA(loteEsMasAntiguo(row.LOTE_PRODUCTO, fechaSalida) ? "P26ERP" : row.LOTE_PRODUCTO,   15) +   // f470_id_lote = lote del producto consumido
+    pA(loteEsMasAntiguo(row.LOTE_PRODUCTO.trim(), fechaSalida) ? "P26ERP" : row.LOTE_PRODUCTO,   15) +   // f470_id_lote = lote del producto consumido
     pN(701,    3) +
     pA("01",   2) +
     pA(centroOperacion,      3) +
     pA("31",  20) +
     pA("70010401",          15) +
     pA("",    15) +
-    pA(row.UNIDAD_PRODUCTO.trim() === "KG" ? "KIL" : row.UNIDAD_PRODUCTO,  4) +
+    pA((row.UNIDAD_PRODUCTO.trim() == "KG") ? "KIL" : row.UNIDAD_PRODUCTO,  4) +
     pQ(Number(row.KIL), 15, 4) +
     pQ(Number(row.UND), 15, 4) +
     pA("",   255) +
@@ -775,9 +775,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           } else {
             try {
               if (rowsConsumo.length > 0) {
+                // Sumar cantidades por código + bodega + lote antes de generar el XML
+                const rowsConsumoAgregados = Object.values(
+                  rowsConsumo.reduce<Record<string, RowXml3>>((acc, row) => {
+                    const key = `${row.CODIGO_PRODUCTO}|${row.BODEGA}|${row.LOTE_PRODUCTO ?? ""}`;
+                    if (!acc[key]) acc[key] = { ...row, KIL: 0, UND: 0 };
+                    acc[key].KIL = Number(acc[key].KIL) + Number(row.KIL);
+                    acc[key].UND = Number(acc[key].UND) + Number(row.UND);
+                    return acc;
+                  }, {})
+                );
                 xml2b = buildXML2Consumo(
                   co, filtro.nombre, fecha, consecOpg2,
-                  rowsConsumo,
+                  rowsConsumoAgregados,
                   filtro.bodegaItemPadre?.trim() ?? "",
                   ppCodigo,
                 );
@@ -920,9 +930,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const toDocResult = (r: DocResult, depOk: boolean) => ({
-      exitoso: r.exitoso,
-      errores: r.errores,
-      estado:  mkEstado(r, depOk),
+      exitoso:      r.exitoso,
+      errores:      r.errores,
+      estado:       mkEstado(r, depOk),
+      respuestaRaw: r.respuestaRaw,
     });
 
     return NextResponse.json({

@@ -52,9 +52,10 @@ interface ErpError {
 }
 
 interface DocResult {
-  exitoso: boolean;
-  errores: ErpError[];
-  estado:  EstadoDoc;
+  exitoso:       boolean;
+  errores:       ErpError[];
+  estado:        EstadoDoc;
+  respuestaRaw?: string;
 }
 
 interface OPGResult {
@@ -351,6 +352,11 @@ function DocResultPanel({
       )}
       {result.estado === "PENDIENTE" && !result.exitoso && result.errores.length === 0 && (
         <p className="text-xs text-slate-500">No se envió — depende del documento anterior.</p>
+      )}
+      {result.estado === "ERROR" && result.errores.length === 0 && result.respuestaRaw?.trim() && (
+        <pre className="text-xs bg-red-100 border border-red-200 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap break-all text-red-800 max-h-40">
+          {result.respuestaRaw.trim()}
+        </pre>
       )}
       {result.estado === "ERROR" && onReintentar && (
         <button

@@ -828,9 +828,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const toDocResult = (r: DocResult, depOk: boolean) => ({
-      exitoso: r.exitoso,
-      errores: r.errores,
-      estado:  mkEstado(r, depOk),
+      exitoso:      r.exitoso,
+      errores:      r.errores,
+      estado:       mkEstado(r, depOk),
+      respuestaRaw: r.respuestaRaw,
     });
 
     return NextResponse.json({
