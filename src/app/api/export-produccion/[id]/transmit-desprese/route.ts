@@ -175,6 +175,9 @@ function buildXML2(
   const productLines = componentes.map((comp, i) => {
     const esPp    = productoProceso.includes(comp.hijoReferencia.trim());
     var lotePad = esPp ? loteJul : "";
+    const productosLoteQuemado = ["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"];
+
+    lotePad = productosLoteQuemado.includes(comp.hijoReferencia.trim()) ? "P26ERP" : lotePad;
 
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
