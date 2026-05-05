@@ -52,6 +52,19 @@ function buildXMLLotes(productos: ProductoLote[], fechaYMD: string): string {
   const fechaVcto = sumarDias(fechaYMD, 30);
   const opening   = "000000100000001001";
 
+  function trimStart(str: string, char: string): string {
+    if (char.length !== 1) {
+      throw new Error("El carácter de referencia debe ser exactamente un carácter");
+    }
+
+    let i = 0;
+    while (i < str.length && str[i] === char) {
+      i++;
+    }
+
+    return str.slice(i);
+  }
+
   const lines = productos.map((p, i) =>
     pN(i + 2, 7) +                    // F_NUMERO_REG  (2, 3, 4…)
     pN(403,   4) +                    // F_TIPO_REG    = 403
@@ -61,7 +74,7 @@ function buildXMLLotes(productos: ProductoLote[], fechaYMD: string): string {
     pN(0,     1) +                    // F_ACTUALIZA_REG = 0
     pA(p.lote,    15) +               // f403_id (lote)
     pN(0,      7) +                   // f403_id_item (vacío)
-    pA(p.codigo,  50) +               // f403_referencia_item
+    pA(trimStart(p.codigo, "0"),  50) +               // f403_referencia_item
     pA("",        20) +               // f403_codigo_barras
     pA("",        20) +               // f403_id_ext1_detalle
     pA("",        20) +               // f403_id_ext2_detalle

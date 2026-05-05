@@ -173,7 +173,7 @@ function buildXML2(
     pN(consecOpg, 8);
 
   const loteSaldoInicial = "P26ERP";
-  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"]);
+  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004"]);
 
   const productLines = componentes.map((comp, i) => {
     const esProductoProceso    = productoProceso.includes(comp.hijoReferencia.trim());
@@ -245,7 +245,7 @@ function buildXML2Consumo(
 
   const fechaSalida = new Date(2026, 4, 1);
   const loteSaldoInicial = "P26ERP";
-  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028"]);
+  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004"]);
 
   const productLines = rows.map((row, i) =>
     pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
@@ -330,6 +330,8 @@ function buildXML3(
 
   const productLines = rows.map((row, i) => {
     const bodega = pA((bodegaItemPadre ?? row.BODEGA)?.trim(), 5);
+    const productoSinUnidadAdicional = new Set<string>(["35538F", "35538E"]);
+
     return (
       pN(i + 3,  7) + pN(470, 4) + pN(2, 2) + pN(2, 2) + pN(1, 3) +
       pA(centroOperacion,      3) +
@@ -353,11 +355,11 @@ function buildXML3(
       pA("70010401",           15) +
       pA("",    15) +
       pQ(Number(row.KIL), 15, 4) +
-      pQ(Number(row.UND), 15, 4) +
+      pQ(productoSinUnidadAdicional.has(row.CODIGO_PRODUCTO.trim()) ? 0 : Number(row.UND), 15, 4) +
       pQ(0,     15, 4) + pQ(0, 15, 4) +
       pA("",   255) + pA("",  2000) +
       pA("",    40) +
-      pA(row.UNIDAD_PRODUCTO,   4) +
+      pA((row.UNIDAD_PRODUCTO.trim() == "KG") ? "KIL" : row.UNIDAD_PRODUCTO,   4) +
       pN(0,     10)
     );
   });
@@ -468,7 +470,7 @@ function buildXMLLotes(productos: ProductoLote[], fechaYMD: string): string {
     pN(i + 2, 7) + pN(403, 4) + pN(0, 2) + pN(2, 2) + pN(1, 3) + pN(0, 1) +
     pA(p.lote,    15) +
     pN(0,          7) +
-    pA(p.codigo,  50) +
+    pA(trimStart(p.codigo, "0"),  50) +
     pA("",        20) + pA("",        20) + pA("",        20) +
     pA("",         3) +
     pN(1,          1) +

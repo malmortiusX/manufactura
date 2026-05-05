@@ -221,8 +221,10 @@ function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number, sinLo
       pN(i + 1,                  10) +
       pN(0,      7) +
       pA(trimStart(row.CODIGO_PRODUCTO, "0"),    50) +
-      pA("",    20) + pA("", 20) + pA("", 20) +
-      pA(row.UNIDAD_PRODUCTO,     4) +
+      pA("",    20) + 
+      pA("", 20) + 
+      pA("", 20) +
+      pA((row.UNIDAD_PRODUCTO.trim() == "KG") ? "KIL" : row.UNIDAD_PRODUCTO,     4) +
       pN(100,    8) +
       pQ(Number(row.KIL), 15, 4) +
       pA(fecha,                   8) +
