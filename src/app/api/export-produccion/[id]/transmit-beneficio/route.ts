@@ -94,7 +94,7 @@ function buildXML1b(
     pA(fecha,              8) +
     pA("0001",             4) +
     pA("", 5) +
-    pA("",                 4) +
+    pA("0001",                 4) +
     pA(item.lote,         15) +
     pA("",              2000) +
     bodega
