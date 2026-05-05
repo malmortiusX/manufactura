@@ -311,7 +311,7 @@ function buildXML3(
   const opening = "000000100000001001";
 
   const encabezado =
-    pN(2,    7) + pN(450, 4) + pN(1, 2) + pN(1, 2) + pN(1, 3) + pN(1, 1) +
+    pN(2,    7) + pN(450, 4) + pN(1, 2) + pN(2, 2) + pN(1, 3) + pN(1, 1) +
     pA(centroOperacion,   3) +
     pA("EPG",             3) +
     pN(1,    8) +
@@ -386,7 +386,7 @@ function buildXML3b(
   const opening = "000000100000001001";
 
   const encabezado =
-    pN(2,    7) + pN(450, 4) + pN(1, 2) + pN(1, 2) + pN(1, 3) + pN(1, 1) +
+    pN(2,    7) + pN(450, 4) + pN(1, 2) + pN(2, 2) + pN(1, 3) + pN(1, 1) +
     pA(centroOperacion,   3) +
     pA("EPG",             3) +
     pN(1,    8) +
