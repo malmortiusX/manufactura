@@ -735,7 +735,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           consumoOpg1Result = skip(log1State.respuestaConsumoProduccion);
         } else {
           try {
-            xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes, ppEntregaItems, PP_CON_LOTE);
+            xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes.filter((c) => c.cantidadPendiente1 > 0), ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "");
             await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
             consumoOpg1Result = await callSoap(xml2);
           } catch (e) { consumoOpg1Result = mkErr(e); }
