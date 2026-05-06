@@ -651,7 +651,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           } else {
             try {
               const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
-              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes, {}, []);
+              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), {}, [], filtro.motivoConsumo?.trim() ?? "");
               await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
               consumoOpg2Result = await callSoap(xml2b);
             } catch (e) { consumoOpg2Result = mkErr(e); }
