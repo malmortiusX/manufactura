@@ -173,7 +173,7 @@ function buildXML2(
     pN(consecOpg, 8);
 
   const loteSaldoInicial = "P26ERP";
-  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004", "MPS090003", "MPS220005"]); 
+  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004", "MPS090003", "MPS220005", "MPS030001"]); 
 
   const productLines = componentes.map((comp, i) => {
     const esProductoProceso    = productoProceso.includes(comp.hijoReferencia.trim());
