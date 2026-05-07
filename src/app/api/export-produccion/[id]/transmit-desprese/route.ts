@@ -245,7 +245,7 @@ function buildXML2Consumo(
 
   const fechaSalida = new Date(2026, 4, 1);
   const loteSaldoInicial = "P26ERP";
-  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004", "MPS090003", "MPS220005"]); 
+  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004", "MPS090003", "MPS220005", "MPS030001"]); 
 
   const productLines = rows.map((row, i) =>
     pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
