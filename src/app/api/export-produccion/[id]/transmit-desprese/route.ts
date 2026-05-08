@@ -130,7 +130,7 @@ function buildXML1b(
     pA(fecha,              8) +
     pA("",                 4) +   // f851_id_metodo_lista — vacío (sin lista de materiales)
     pA("", 5) +
-    pA("0001",                 4) +
+    pA("",                 4) +
     pA(item.lote,         15) +
     pA("",              2000) +
     bodega
