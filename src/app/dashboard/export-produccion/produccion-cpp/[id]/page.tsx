@@ -231,7 +231,7 @@ function buildXML1(filtro: Filtro, rowsOpg1: RowOpg1[], consecOpg: number, sinLo
       pA(fecha,                   8) +
       pA("0001",                  4) +
       pA("",                      5) +
-      pA("",                      4) + // f851_id_metodo_ruta: metodo de ruta
+      pA("0001",                      4) + // f851_id_metodo_ruta: metodo de ruta
       pA(esSinLote ? "" : lote,  15) +
       pA("",                   2000) +
       pA(filtro.bodegaItemPadre ?? "", 5)

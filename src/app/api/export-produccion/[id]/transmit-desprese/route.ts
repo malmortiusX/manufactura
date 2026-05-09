@@ -130,7 +130,7 @@ function buildXML1b(
     pA(fecha,              8) +
     pA("",                 4) +   // f851_id_metodo_lista — vacío (sin lista de materiales)
     pA("", 5) +
-    pA("",                 4) +
+    pA("0001",                 4) +
     pA(item.lote,         15) +
     pA("",              2000) +
     bodega
@@ -312,7 +312,7 @@ function buildXML3(
 
   const encabezado =
     pN(2,    7) + pN(450, 4) + pN(1, 2) + 
-    pN(1, 2) + // Version del tipo de registro F_VERSION-REG
+    pN(2, 2) + // Version del tipo de registro F_VERSION-REG
     pN(1, 3) + pN(1, 1) +
     pA(centroOperacion,   3) +
     pA("EPG",             3) +
@@ -389,7 +389,7 @@ function buildXML3b(
 
   const encabezado =
     pN(2,    7) + pN(450, 4) + pN(1, 2) + 
-    pN(1, 2) + // Version del tipo de registro F_VERSION-REG
+    pN(2, 2) + // Version del tipo de registro F_VERSION-REG
     pN(1, 3) + pN(1, 1) +
     pA(centroOperacion,   3) +
     pA("EPG",             3) +

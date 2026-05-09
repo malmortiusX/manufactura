@@ -223,7 +223,7 @@ function buildXML1(
       pA(fecha,                   8) +
       pA("0001",                  4) +
       pA("",                      5) +
-      pA("",                      4) + // f851_id_metodo_ruta: metodo de ruta
+      pA("0001",                      4) + // f851_id_metodo_ruta: metodo de ruta
       pA(esSinLote ? "" : lote,  15) +   // f851_id_lote: vacío si es sin-lote
       pA("",                   2000) +
       pA(filtro.bodegaItemPadre ?? "", 5)
