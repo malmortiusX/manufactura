@@ -99,6 +99,9 @@ model ExportProduccion {
   // Motivo para f470_id_motivo (consumo) y f470_id_motivo_entrega (entrega)
   motivoConsumo             String?  @db.Char(2)
   motivoEntrega             String?  @db.Char(2)
+  // Centro de costo para f470_id_ccosto_movto
+  ccostoConsumo             String?  @db.VarChar(15)
+  ccostoEntrega             String?  @db.VarChar(15)
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt

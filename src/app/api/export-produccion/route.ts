@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
         productosSinCantAdicional: body.productosSinCantAdicional || null,
         motivoConsumo:             body.motivoConsumo             || null,
         motivoEntrega:             body.motivoEntrega             || null,
+        ccostoConsumo:             body.ccostoConsumo             || null,
+        ccostoEntrega:             body.ccostoEntrega             || null,
       },
     });
     return NextResponse.json(registro, { status: 201 });

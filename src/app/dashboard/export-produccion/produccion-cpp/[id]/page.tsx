@@ -1349,11 +1349,11 @@ export default function DesPreseDetailPage() {
       {(rowsConsumo.length > 0 || loading) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           {/* Encabezado con contador de selección */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50 gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-                Consumo OPG2
+                Consumo de Producción
               </span>
             </div>
             {!loading && rowsConsumo.length > 0 && (
@@ -1475,11 +1475,13 @@ export default function DesPreseDetailPage() {
       {/* Tabla de productos terminados */}
       {(rows.length > 0 || loading) && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 bg-slate-50">
-            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
-            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-              Producto terminado OPG1
-            </span>
+          <div className="flex items-center px-5 py-3 border-b border-slate-100 bg-slate-50 gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Entrega de Producción
+              </span>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

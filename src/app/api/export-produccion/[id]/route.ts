@@ -39,6 +39,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       productosSinCantAdicional: body.productosSinCantAdicional || null,
       motivoConsumo:             body.motivoConsumo             || null,
       motivoEntrega:             body.motivoEntrega             || null,
+      ccostoConsumo:             body.ccostoConsumo             || null,
+      ccostoEntrega:             body.ccostoEntrega             || null,
     },
   });
 

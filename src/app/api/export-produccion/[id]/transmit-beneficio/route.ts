@@ -126,6 +126,7 @@ function buildXML2(
   lotesPorProducto: PpItem[],
   productoProceso:  string[],
   motivoConsumo:    string,
+  ccostoMovto:      string,
 ): string {
   const opening = "000000100000001001";
 
@@ -172,8 +173,7 @@ function buildXML2(
       pA(motivoConsumo,         2) +
       pA(centroOperacion,       3) +
       pA("31",  20) +
-      pA("70010401",           15) +
-      pA("",    15) +
+      pA(ccostoMovto,          15) +
       pA(comp.hijoUnidad,       4) +
       pQ(comp.cantidadPendiente1, 15, 4) +
       pQ(comp.cantidadPendiente2,     15, 4) +
@@ -205,6 +205,7 @@ function buildXML2ConLotes(
   consecOpg:       number,
   lineas:          Xml2Line[],
   motivoConsumo:   string,
+  ccostoMovto:     string,
 ): string {
   const opening = "000000100000001001";
 
@@ -242,8 +243,7 @@ function buildXML2ConLotes(
     pA(motivoConsumo,         2) +
     pA(centroOperacion,       3) +
     pA("31",  20) +
-    pA("70010401",           15) +
-    pA("",    15) +
+    pA(ccostoMovto,          15) +
     pA(ln.hijoUnidad,         4) +
     pQ(ln.cantidad1,         15, 4) +
     pQ(ln.cantidad2,         15, 4) +
@@ -274,6 +274,7 @@ function buildXML3(
   rows:            RowXml3[],
   bodegaItemPadre: string | null | undefined,
   motivoEntrega:   string,
+  ccostoMovto:     string,
 ): string {
   const opening = "000000100000001001";
 
@@ -320,8 +321,7 @@ function buildXML3(
       pA("", 2) +
       pA(centroOperacion,       3) +
       pA("31",  20) +
-      pA("70010401",           15) +
-      pA("",    15) +
+      pA(ccostoMovto,          15) +
       pQ(Number(row.KIL), 15, 4) +
       pQ(Number(row.UND), 15, 4) +
       pQ(0,     15, 4) + pQ(0, 15, 4) +
@@ -352,6 +352,7 @@ function buildXML3b(
   bodegaItemPadre: string | null | undefined,
   ppCodigos:       string[],
   motivoEntrega:   string,
+  ccostoMovto:     string,
 ): string {
   const ppRef = ppCodigos[0] ?? "PP00002";   // código de referencia PP para todas las líneas
 
@@ -410,8 +411,7 @@ function buildXML3b(
       pA("", 2) +
       pA(centroOperacion,   3) +
       pA("31",  20) +
-      pA("70010401",       15) +
-      pA("",    15) +
+      pA(ccostoMovto,      15) +
       pQ(Number(row.KIL), 15, 4) +
       pQ(Number(row.UND), 15, 4) +
       pQ(0,     15, 4) + pQ(0, 15, 4) +
@@ -540,6 +540,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     };
     const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], logId1,
             logId2: bodyLogId2, prevConsecOpg2 } = body;
+
+    const ccostoConsumo = filtro.ccostoConsumo?.trim() ?? "";
+    const ccostoEntrega = filtro.ccostoEntrega?.trim() ?? "";
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
@@ -743,7 +746,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           } else {
             try {
               const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
-              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), {}, [], filtro.motivoConsumo?.trim() ?? "");
+              xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), {}, [], filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
               await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
               consumoOpg2Result = await callSoap(xml2b);
             } catch (e) { consumoOpg2Result = mkErr(e); }
@@ -789,7 +792,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               entregaOpg2Result = skip(log2State.respuestaEntregaProduccion);
             } else {
               try {
-                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS, filtro.motivoEntrega?.trim() ?? "");
+                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega);
                 await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
                 entregaOpg2Result = await callSoap(xml3b);
               } catch (e) { entregaOpg2Result = mkErr(e); }
@@ -980,9 +983,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
             if (existenciasOk) {
               if (lotesParaConsumo && lotesParaConsumo.length > 0) {
-                xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "");
+                xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
               } else {
-                xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "");
+                xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
               }
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
               consumoOpg1Result = await callSoap(xml2);
@@ -1030,7 +1033,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   ? { ...r, UND: 0 }
                   : r
               );
-              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre, filtro.motivoEntrega?.trim() ?? "");
+              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega);
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
               entregaOpg1Result = await callSoap(xml3);
             } catch (e) { entregaOpg1Result = mkErr(e); }
