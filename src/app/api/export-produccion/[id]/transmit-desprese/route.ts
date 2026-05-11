@@ -289,6 +289,7 @@ function buildXML2ConLotes(
     pA(centroOperacion,       3) +
     pA("31",  20) +
     pA(ccostoMovto,          15) +
+    pA("",          15) +
     pA(ln.hijoUnidad,         4) +
     pQ(ln.cantidad1,         15, 4) +
     pQ(ln.cantidad2,         15, 4) +
@@ -357,6 +358,7 @@ function buildXML2Consumo(
     pA(centroOperacion,      3) +
     pA("31",  20) +
     pA(ccostoMovto,         15) +
+    pA("",          15) +
     pA((row.UNIDAD_PRODUCTO.trim() == "KG") ? "KIL" : row.UNIDAD_PRODUCTO,  4) +
     pQ(Number(row.KIL), 15, 4) +
     pQ(Number(row.UND), 15, 4) +
@@ -446,6 +448,7 @@ function buildXML3(
       pA(centroOperacion,       3) +
       pA("31",  20) +
       pA(ccostoMovto,          15) +
+      pA("",          15) +
       pQ(Number(row.KIL), 15, 4) +
       pQ(productoSinUnidadAdicional.has(row.CODIGO_PRODUCTO.trim()) ? 0 : Number(row.UND), 15, 4) +
       pQ(0,     15, 4) + pQ(0, 15, 4) +
@@ -527,6 +530,7 @@ function buildXML3b(
       pA(centroOperacion,   3) +
       pA("31",  20) +
       pA(ccostoMovto,      15) +
+      pA("",          15) +
       pQ(Number(row.KIL), 15, 4) +
       pQ(Number(row.UND), 15, 4) +
       pQ(0,     15, 4) + pQ(0, 15, 4) +
