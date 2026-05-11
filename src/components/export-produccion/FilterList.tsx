@@ -528,7 +528,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-green-100">
                 <Field label="Motivo" name="motivoConsumo" value={form.motivoConsumo} onChange={handleChange} maxLength={2} placeholder="Ej: 01" mono />
-                <Field label="MOTIVO (C. Costo)" name="ccostoConsumo" value={form.ccostoConsumo} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
+                <Field label="CENTRO DE COSTOS" name="ccostoConsumo" value={form.ccostoConsumo} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
               </div>
               <div className="my-6 border-t border-slate-100" />
               <div className="mb-4">
@@ -539,7 +539,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-teal-100">
                 <Field label="Motivo" name="motivoEntrega" value={form.motivoEntrega} onChange={handleChange} maxLength={2} placeholder="Ej: 01" mono />
-                <Field label="MOTIVO (C. Costo)" name="ccostoEntrega" value={form.ccostoEntrega} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
+                <Field label="CENTRO DE COSTOS" name="ccostoEntrega" value={form.ccostoEntrega} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
               </div>
             </>
           )}
