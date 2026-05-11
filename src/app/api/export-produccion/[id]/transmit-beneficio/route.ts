@@ -15,12 +15,23 @@ import { headers }                                   from "next/headers";
 import {
   callSoap,
   queryComponentesOP,
+  queryExistenciaLote,
   type DocResult,
   type ComponenteOP,
 } from "@/lib/erp-soap";
 
 export type { ErpError, DocResult } from "@/lib/erp-soap";
 
+// ── Comparación de existencias por bodega + referencia + lote ────────────
+interface ExistenciaComparacion {
+  bodegaId:    string;
+  referencia:  string;
+  lote:        string;
+  disponible1: number;
+  disponible2: number;
+  aConsumir1:  number;
+  suficiente:  boolean;
+}
 
 // ── Utilidades de formato ──────────────────────────────────────────────────
 const pN = (val: string | number | null | undefined, len: number) =>
@@ -114,6 +125,7 @@ function buildXML2(
   componentes:      ComponenteOP[],
   lotesPorProducto: PpItem[],
   productoProceso:  string[],
+  motivoConsumo:    string,
 ): string {
   const opening = "000000100000001001";
 
@@ -157,7 +169,7 @@ function buildXML2(
       pA("",    10) +
       pA(lotePad,              15) +
       pN(701,    3) +
-      pA("01",   2) +
+      pA(motivoConsumo,         2) +
       pA(centroOperacion,       3) +
       pA("31",  20) +
       pA("70010401",           15) +
@@ -171,6 +183,75 @@ function buildXML2(
   });
 
   const closingNum = componentes.length + 3;
+  const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
+  return [opening, encabezado, ...productLines, closing].join("\n");
+}
+
+// ── XML2ConLotes — SPG OPG1 con lotes explícitos (distribución FIFO) ────────
+interface Xml2Line {
+  padreReferencia: string;
+  hijoReferencia:  string;
+  bodegaId:        string;
+  lote:            string;
+  hijoUnidad:      string;
+  cantidad1:       number;
+  cantidad2:       number;
+}
+
+function buildXML2ConLotes(
+  centroOperacion: string,
+  nombre:          string,
+  fecha:           string,
+  consecOpg:       number,
+  lineas:          Xml2Line[],
+  motivoConsumo:   string,
+): string {
+  const opening = "000000100000001001";
+
+  const encabezado =
+    pN(2,   7) + pN(450, 4) + pN(3, 2) + pN(1, 2) + pN(1, 3) + pN(1, 1) +
+    pA(centroOperacion, 3) +
+    pA("SCG",           3) +
+    pN(1,   8) +
+    pA(fecha,           8) +
+    pN(1,   1) + pN(0, 1) + pN(710, 3) +
+    pA("",  15) +
+    pA(nombre,        255) +
+    pA("01",  2) +
+    pA("",   15) +
+    pA("OPG", 3) +
+    pN(consecOpg, 8);
+
+  const productLines = lineas.map((ln, i) =>
+    pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
+    pA(centroOperacion,       3) +
+    pA("SCG",                 3) +
+    pN(1,      8) +
+    pN(i + 1, 10) +
+    pN(0,      7) +
+    pA(ln.padreReferencia,   50) +
+    pA("",    20) + pA("",    20) + pA("",    20) +
+    pN(0,     10) +
+    pN(0,      7) +
+    pA(ln.hijoReferencia,    50) +
+    pA("",    20) + pA("",    20) + pA("",    20) +
+    pA(ln.bodegaId,           5) +
+    pA("",    10) +
+    pA(ln.lote,              15) +
+    pN(701,    3) +
+    pA(motivoConsumo,         2) +
+    pA(centroOperacion,       3) +
+    pA("31",  20) +
+    pA("70010401",           15) +
+    pA("",    15) +
+    pA(ln.hijoUnidad,         4) +
+    pQ(ln.cantidad1,         15, 4) +
+    pQ(ln.cantidad2,         15, 4) +
+    pA("",   255) +
+    pA("",  2000)
+  );
+
+  const closingNum = lineas.length + 3;
   const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
   return [opening, encabezado, ...productLines, closing].join("\n");
 }
@@ -192,6 +273,7 @@ function buildXML3(
   consecOpg:       number,
   rows:            RowXml3[],
   bodegaItemPadre: string | null | undefined,
+  motivoEntrega:   string,
 ): string {
   const opening = "000000100000001001";
 
@@ -234,7 +316,8 @@ function buildXML3(
       pA("",    10) +
       pA(row.LOTE_PRODUCTO,    15) +
       pN(701,    3) +
-      pA("03",   2) + pA("",    2) +
+      pA(motivoEntrega, 2) +
+      pA("", 2) +
       pA(centroOperacion,       3) +
       pA("31",  20) +
       pA("70010401",           15) +
@@ -268,6 +351,7 @@ function buildXML3b(
   rows:            RowXml3[],
   bodegaItemPadre: string | null | undefined,
   ppCodigos:       string[],
+  motivoEntrega:   string,
 ): string {
   const ppRef = ppCodigos[0] ?? "PP00002";   // código de referencia PP para todas las líneas
 
@@ -322,7 +406,8 @@ function buildXML3b(
       pA("",    10) +
       pA(row.LOTE_PRODUCTO,    15) +
       pN(701,    3) +
-      pA("03",   2) + pA("",    2) +
+      pA(motivoEntrega, 2) +
+      pA("", 2) +
       pA(centroOperacion,   3) +
       pA("31",  20) +
       pA("70010401",       15) +
@@ -518,6 +603,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       exitoso: true, printTipoError: -1, errores: [], respuestaRaw: respuesta ?? "",
     });
 
+    // Resultado de verificación de existencias OPG1 (solo cuando son insuficientes)
+    let existenciaCheck: { items: ExistenciaComparacion[]; suficiente: boolean } | null = null;
+
     // Resultados
     let ordenOpg1Result:   DocResult = PENDIENTE;
     let ordenOpg2Result:   DocResult = PENDIENTE;
@@ -701,7 +789,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               entregaOpg2Result = skip(log2State.respuestaEntregaProduccion);
             } else {
               try {
-                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS);
+                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, PP_CODIGOS, filtro.motivoEntrega?.trim() ?? "");
                 await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
                 entregaOpg2Result = await callSoap(xml3b);
               } catch (e) { entregaOpg2Result = mkErr(e); }
@@ -739,9 +827,166 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           consumoOpg1Result = skip(log1State.respuestaConsumoProduccion);
         } else {
           try {
-            xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, opg1Componentes.filter((c) => c.cantidadPendiente1 > 0), ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "");
-            await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
-            consumoOpg1Result = await callSoap(xml2);
+            const componentes1ToConsume = opg1Componentes.filter((c) => c.cantidadPendiente1 > 0);
+
+            // ── Verificar existencias OPG1 antes de consumir ──────────────
+            let existenciasOk    = true;
+            let lotesParaConsumo: Xml2Line[] | null = null;
+            try {
+              const existencias = await queryExistenciaLote(co, "OPG", consecOpg1);
+
+              // Paso A: sumatoria de pendiente por (Bodega_id, Hijo_Referencia)
+              type NeedEntry = { bodegaId: string; referencia: string; pendiente1: number; pendiente2: number };
+              const needMap = new Map<string, NeedEntry>();
+              for (const e of existencias) {
+                const bId = e.bodegaId.trim();
+                const ref = e.referencia.trim();
+                const key = `${bId}\x00${ref}`;
+                const prev = needMap.get(key);
+                if (!prev) {
+                  needMap.set(key, { bodegaId: bId, referencia: ref, pendiente1: e.pendiente1, pendiente2: e.pendiente2 });
+                } else {
+                  prev.pendiente1 += e.pendiente1;
+                  prev.pendiente2 += e.pendiente2;
+                }
+              }
+
+              // Paso B: stock por (Bodega_id, Hijo_Referencia, Lote) — deduplica
+              type StockEntry = { bodegaId: string; referencia: string; lote: string; disponible1: number; disponible2: number };
+              const stockMap = new Map<string, StockEntry>();
+              for (const e of existencias) {
+                const bId  = e.bodegaId.trim();
+                const ref  = e.referencia.trim();
+                const lote = e.lote.trim();
+                const key  = `${bId}\x00${ref}\x00${lote}`;
+                const prev = stockMap.get(key);
+                if (!prev || e.disponible1 > prev.disponible1) {
+                  stockMap.set(key, { bodegaId: bId, referencia: ref, lote, disponible1: e.disponible1, disponible2: e.disponible2 });
+                }
+              }
+
+              // Paso C: total disponible por (Bodega_id, Hijo_Referencia)
+              const availMap = new Map<string, number>();
+              for (const pos of stockMap.values()) {
+                const key = `${pos.bodegaId}\x00${pos.referencia}`;
+                availMap.set(key, (availMap.get(key) ?? 0) + pos.disponible1);
+              }
+
+              // Paso D: items de comparación (uno por posición de stock)
+              const items: ExistenciaComparacion[] = [];
+              for (const pos of stockMap.values()) {
+                const needKey    = `${pos.bodegaId}\x00${pos.referencia}`;
+                const aConsumir1 = needMap.get(needKey)?.pendiente1 ?? 0;
+                const totalDisp  = availMap.get(needKey) ?? 0;
+                items.push({
+                  bodegaId:    pos.bodegaId,
+                  referencia:  pos.referencia,
+                  lote:        pos.lote,
+                  disponible1: pos.disponible1,
+                  disponible2: pos.disponible2,
+                  aConsumir1,
+                  suficiente:  totalDisp >= aConsumir1,
+                });
+              }
+              for (const [key, need] of needMap.entries()) {
+                const hasStock = [...stockMap.keys()].some((k) => k.startsWith(key + "\x00"));
+                if (!hasStock && need.pendiente1 > 0) {
+                  items.push({
+                    bodegaId:    need.bodegaId,
+                    referencia:  need.referencia,
+                    lote:        "",
+                    disponible1: 0,
+                    disponible2: 0,
+                    aConsumir1:  need.pendiente1,
+                    suficiente:  false,
+                  });
+                }
+              }
+
+              const todoSuficiente = items.every((i) => i.suficiente);
+              if (!todoSuficiente) {
+                existenciaCheck = { items, suficiente: false };
+                existenciasOk   = false;
+              } else {
+                // ── Distribuir el consumo FIFO por lotes ──────────────────
+                const refToPadre  = new Map<string, string>();
+                const refToUnidad = new Map<string, string>();
+                for (const comp of opg1Componentes) {
+                  const ref = comp.hijoReferencia.trim();
+                  if (!refToPadre.has(ref))  refToPadre.set(ref,  comp.padreReferencia.trim());
+                  if (!refToUnidad.has(ref)) refToUnidad.set(ref, comp.hijoUnidad.trim());
+                }
+                for (const e of existencias) {
+                  const ref = e.referencia.trim();
+                  if (!refToUnidad.has(ref)) refToUnidad.set(ref, e.unidad.trim());
+                }
+
+                const stockByKey = new Map<string, Array<{ lote: string; disponible1: number }>>();
+                for (const pos of stockMap.values()) {
+                  const key = `${pos.bodegaId}\x00${pos.referencia}`;
+                  const arr = stockByKey.get(key) ?? [];
+                  arr.push({ lote: pos.lote, disponible1: pos.disponible1 });
+                  stockByKey.set(key, arr);
+                }
+                for (const arr of stockByKey.values()) {
+                  arr.sort((a, b) => a.lote.localeCompare(b.lote));
+                }
+
+                const lineas: Xml2Line[] = [];
+                for (const [key, need] of needMap.entries()) {
+                  const positions = stockByKey.get(key) ?? [];
+                  const padre     = refToPadre.get(need.referencia)  ?? "";
+                  const unidad    = refToUnidad.get(need.referencia) ?? "KIL";
+                  let rem1        = need.pendiente1;
+                  const total1    = need.pendiente1;
+                  for (const pos of positions) {
+                    if (rem1 <= 0.00001) break;
+                    const take1 = Math.min(pos.disponible1, rem1);
+                    const take2 = total1 > 0 && need.pendiente2 > 0
+                      ? Math.round((need.pendiente2 * (take1 / total1)) * 10000) / 10000
+                      : 0;
+                    lineas.push({
+                      padreReferencia: padre,
+                      hijoReferencia:  need.referencia,
+                      bodegaId:        need.bodegaId,
+                      lote:            pos.lote,
+                      hijoUnidad:      unidad,
+                      cantidad1:       take1,
+                      cantidad2:       take2,
+                    });
+                    rem1 -= take1;
+                  }
+                }
+
+                // Fallback: componentes no devueltos por el WS
+                const refsEnNeed = new Set([...needMap.keys()].map((k) => k.split("\x00")[1]));
+                for (const comp of componentes1ToConsume) {
+                  if (!refsEnNeed.has(comp.hijoReferencia.trim())) {
+                    lineas.push({
+                      padreReferencia: comp.padreReferencia.trim(),
+                      hijoReferencia:  comp.hijoReferencia.trim(),
+                      bodegaId:        comp.bodegaId.trim(),
+                      lote:            "",
+                      hijoUnidad:      comp.hijoUnidad.trim(),
+                      cantidad1:       comp.cantidadPendiente1,
+                      cantidad2:       comp.cantidadPendiente2,
+                    });
+                  }
+                }
+
+                lotesParaConsumo = lineas;
+              }
+            } catch { /* si falla la consulta, continuar con el SPG de todas formas */ }
+
+            if (existenciasOk) {
+              if (lotesParaConsumo && lotesParaConsumo.length > 0) {
+                xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "");
+              } else {
+                xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "");
+              }
+              await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
+              consumoOpg1Result = await callSoap(xml2);
+            }
           } catch (e) { consumoOpg1Result = mkErr(e); }
         }
 
@@ -785,7 +1030,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   ? { ...r, UND: 0 }
                   : r
               );
-              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre);
+              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rowsEpg1, filtro.bodegaItemPadre, filtro.motivoEntrega?.trim() ?? "");
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
               entregaOpg1Result = await callSoap(xml3);
             } catch (e) { entregaOpg1Result = mkErr(e); }
@@ -855,6 +1100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         entrega: toDocResult(entregaOpg2Result,  consumoOpg2Result.exitoso),
       },
       xmls: { xml1b, xml2b, xml3b, xml2, xml3, xmlLotesEpgOpg2 },
+      existenciaCheck: existenciaCheck ?? undefined,
     });
   } catch (err) {
     console.error("[POST /api/export-produccion/[id]/transmit-beneficio]", err);

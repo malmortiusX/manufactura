@@ -37,6 +37,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ppCodigos:                 body.ppCodigos                 || null,
       ppConLote:                 body.ppConLote                 || null,
       productosSinCantAdicional: body.productosSinCantAdicional || null,
+      motivoConsumo:             body.motivoConsumo             || null,
+      motivoEntrega:             body.motivoEntrega             || null,
     },
   });
 

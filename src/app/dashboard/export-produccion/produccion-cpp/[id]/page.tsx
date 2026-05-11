@@ -6,7 +6,7 @@
 //   SPG OPG1: consumo con todos los componentes de OPG1
 //   EPG OPG1: entrega de los productos filtrados
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 interface ProductRow {
   UNIDAD_PRODUCTO: string;
@@ -36,6 +36,8 @@ interface Filtro {
   bodegaItemPadre: string | null;
   tipoDoctoOrden: string | null;
   productosSinLote: string | null;
+  motivoConsumo: string | null;
+  motivoEntrega: string | null;
 }
 
 type EstadoDoc = "PENDIENTE" | "ENVIADO" | "ERROR";
@@ -65,6 +67,22 @@ interface OPGResult {
 
 interface PpItem { codigo: string; cantidad: number; unidad: string; lote: string; }
 
+interface ExistenciaComparacion {
+  bodegaId:     string;
+  referencia:   string;
+  descripcion?: string;
+  lote:         string;
+  disponible1:  number;
+  disponible2:  number;
+  aConsumir1:   number;
+  suficiente:   boolean;
+}
+
+interface ExistenciaCheck {
+  items:      ExistenciaComparacion[];
+  suficiente: boolean;
+}
+
 interface TransmitResult {
   logId1:   number;
   logId2:   number | null;
@@ -80,6 +98,8 @@ interface TransmitResult {
     xml2:  string;
     xml3:  string;
   };
+  existenciaCheck?:     ExistenciaCheck;
+  existenciaCheckOpg2?: ExistenciaCheck;
 }
 
 interface RowOpg1 {
@@ -512,6 +532,129 @@ function LotesResultPanel({ result }: { result: LoteCreacionResult }) {
   );
 }
 
+// ── Panel de verificación de existencias ─────────────────────────────────
+function ExistenciaCheckPanel({
+  titulo = "Verificación de existencias OPG1",
+  check,
+  onReverificar,
+  loading,
+}: {
+  titulo?:       string;
+  check:         ExistenciaCheck;
+  onReverificar: () => void;
+  loading:       boolean;
+}) {
+  const hayDescripcion = check.items.some((i) => i.descripcion);
+  const hayLote        = check.items.some((i) => i.lote);
+
+  return (
+    <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
+      {/* Encabezado */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-red-100 bg-red-50">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span className="text-xs font-semibold text-red-700 uppercase tracking-wider">
+            {titulo}
+          </span>
+        </div>
+        <button
+          onClick={onReverificar}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 disabled:bg-red-300 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <svg
+            className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {loading ? "Verificando…" : "Re-verificar y continuar"}
+        </button>
+      </div>
+
+      {/* Cuerpo */}
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-red-600">
+          Las referencias marcadas en rojo no tienen suficiente existencia disponible en el ERP.
+          Ajuste las cantidades en el sistema y luego presione{" "}
+          <strong>Re-verificar y continuar</strong>.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Bodega</th>
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Referencia</th>
+                {hayDescripcion && (
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Descripción</th>
+                )}
+                {hayLote && (
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Lote</th>
+                )}
+                <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">A consumir</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Disponible</th>
+                <th className="text-center px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {check.items.map((item, i) => (
+                <tr key={i} className={item.suficiente ? "" : "bg-red-50"}>
+                  <td className={`px-3 py-2 font-mono text-xs ${item.suficiente ? "text-slate-500" : "text-red-600"}`}>
+                    {item.bodegaId || <span className="italic text-slate-400">—</span>}
+                  </td>
+                  <td className={`px-3 py-2 font-mono ${item.suficiente ? "text-slate-700" : "text-red-700 font-semibold"}`}>
+                    {item.referencia}
+                  </td>
+                  {hayDescripcion && (
+                    <td className={`px-3 py-2 ${item.suficiente ? "text-slate-600" : "text-red-600"}`}>
+                      {item.descripcion || <span className="italic text-slate-400">—</span>}
+                    </td>
+                  )}
+                  {hayLote && (
+                    <td className={`px-3 py-2 ${item.suficiente ? "text-slate-500" : "text-red-600"}`}>
+                      {item.lote || <span className="italic text-slate-400">sin lote</span>}
+                    </td>
+                  )}
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                    {fmtNum(item.aConsumir1)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums font-medium ${
+                    item.suficiente ? "text-slate-700" : "text-red-700"
+                  }`}>
+                    {fmtNum(item.disponible1)}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {item.suficiente ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        OK
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Insuficiente
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Panel colapsable de XMLs previos a la transmisión ────────────────────
 function XmlsPreview({ xmlLotes, xml1 }: { xmlLotes: string; xml1: string }) {
   const [open, setOpen] = useState(false);
@@ -638,6 +781,9 @@ export default function DesPreseDetailPage() {
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
   const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
   const [logId1, setLogId1]                 = useState<number | null>(null);
+  const [isResumeMode, setIsResumeMode]     = useState(false);
+  const searchParams = useSearchParams();
+  const bacheParam   = searchParams.get("bache");
 
   const cargarDatos = useCallback(async () => {
     // Guard: evita la doble ejecución de React Strict Mode (mount→unmount→remount).
@@ -707,7 +853,101 @@ export default function DesPreseDetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { cargarDatos(); }, [cargarDatos]);
+  const cargarResume = useCallback(async (bacheNum: number) => {
+    const guard = `${id}:r:${bacheNum}`;
+    if (_cargando.has(guard)) return;
+    _cargando.add(guard);
+
+    setBache(null);
+    setRows([]);
+    setRowsConsumo([]);
+    setRowsOpg1([]);
+    setLoading(true);
+    setError(null);
+    setTransmitResult(null);
+    setTransmitError(null);
+    setLotesResult(null);
+    setXmlsPreview(null);
+    setLogId1(null);
+    setConsecOpg1(0);
+    try {
+      const res  = await fetch(`/api/export-produccion/${id}/resume-bache?bache=${bacheNum}`);
+      const text = await res.text();
+      if (!text) throw new Error("El servidor no devolvió respuesta");
+      const data = JSON.parse(text);
+      if (!res.ok) throw new Error(data.error ?? "Error al cargar el bache");
+
+      const filtroData:   Filtro       = data.filtro;
+      const rowsOpg1Data: RowOpg1[]    = data.rowsOpg1 ?? [];
+      const consumoRows:  ProductRow[] = data.rowsConsumo ?? [];
+
+      setFiltro(filtroData);
+      setBache(bacheNum);
+      setRows(data.rows);
+      setRowsOpg1(rowsOpg1Data);
+      setRowsConsumo(consumoRows);
+      setSelectedConsumoIdx(new Set(consumoRows.map((_, i) => i)));
+      setLogId1(data.logId1);
+      setConsecOpg1(data.consecOpg1);
+      setIsResumeMode(true);
+
+      // Reconstruir transmitResult desde los logs guardados
+      type LogSnap = {
+        id: number; numeroOpg: number;
+        estadoOrdenProduccion: string; estadoConsumoProduccion: string; estadoEntregaProduccion: string;
+        xml1: string; xml2: string; xml3: string;
+      };
+      const log1 = data.log1 as LogSnap;
+      const log2 = data.log2 as LogSnap | null;
+      const mkDoc = (estado: string): DocResult => ({
+        exitoso: estado === "ENVIADO",
+        errores: [],
+        estado:  estado as EstadoDoc,
+      });
+
+      setTransmitResult({
+        logId1:  data.logId1,
+        logId2:  data.logId2  ?? null,
+        opg1Num: log1.numeroOpg,
+        opg2Num: log2?.numeroOpg ?? 0,
+        ppItems: [],
+        opg1: {
+          orden:   mkDoc(log1.estadoOrdenProduccion),
+          consumo: mkDoc(log1.estadoConsumoProduccion),
+          entrega: mkDoc(log1.estadoEntregaProduccion),
+        },
+        opg2: {
+          orden:   mkDoc(log2?.estadoOrdenProduccion   ?? "PENDIENTE"),
+          consumo: mkDoc(log2?.estadoConsumoProduccion ?? "PENDIENTE"),
+          entrega: mkDoc(log2?.estadoEntregaProduccion ?? "PENDIENTE"),
+        },
+        xmls: {
+          xml1b: log2?.xml1 ?? "",
+          xml2b: log2?.xml2 ?? "",
+          xml3b: log2?.xml3 ?? "",
+          xml2:  log1.xml2  ?? "",
+          xml3:  log1.xml3  ?? "",
+        },
+      });
+
+      // Vista previa XML1
+      const sinLote = new Set<string>(
+        (filtroData.productosSinLote ?? "").split(",").map((s) => s.trim()).filter(Boolean)
+      );
+      setXmlsPreview({ xmlLotes: "", xml1: buildXML1(filtroData, rowsOpg1Data, data.consecOpg1, sinLote) });
+
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setLoading(false);
+      _cargando.delete(guard);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (bacheParam) cargarResume(Number(bacheParam));
+    else             cargarDatos();
+  }, [cargarDatos, cargarResume, bacheParam]);
 
   const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
@@ -913,7 +1153,7 @@ export default function DesPreseDetailPage() {
           )}
 
           <button
-            onClick={cargarDatos}
+            onClick={isResumeMode && bache ? () => cargarResume(bache) : cargarDatos}
             disabled={loading || transmitting}
             className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-white border border-transparent hover:border-slate-200 px-3 py-2 rounded-xl transition-all disabled:opacity-40"
           >
@@ -925,11 +1165,11 @@ export default function DesPreseDetailPage() {
 
           {!loading && rows.length > 0 && (
             <button
-              onClick={() => transmitir(false)}
+              onClick={() => transmitir(isResumeMode)}
               disabled={transmitting || retrying || loading}
               className="flex items-center gap-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-4 py-2 rounded-xl transition-all shadow-sm"
             >
-              {transmitting ? (
+              {transmitting || retrying ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -941,7 +1181,7 @@ export default function DesPreseDetailPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
-                  Transmitir al ERP
+                  {isResumeMode ? "Continuar transmisión" : "Transmitir al ERP"}
                 </>
               )}
             </button>
@@ -964,6 +1204,20 @@ export default function DesPreseDetailPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           {transmitError}
+        </div>
+      )}
+
+      {/* Banner modo reanudación */}
+      {isResumeMode && (
+        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-4 py-3 rounded-xl">
+          <svg className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>
+            Modo de reanudación — bache <span className="font-mono font-semibold">#{bache}</span>.
+            {" "}Los estados anteriores del proceso se muestran abajo.
+            Presione <strong>Continuar transmisión</strong> para reanudar desde el paso donde se detuvo.
+          </span>
         </div>
       )}
 
@@ -1004,7 +1258,8 @@ export default function DesPreseDetailPage() {
                     ? () => transmitir(true) : undefined
                 }
                 onReintentarConsumo={
-                  !tr.opg2.consumo.exitoso && tr.opg2.orden.exitoso
+                  !tr.opg2.consumo.exitoso && tr.opg2.orden.exitoso &&
+                  !tr.existenciaCheckOpg2
                     ? () => transmitir(true) : undefined
                 }
                 onReintentarEntrega={
@@ -1012,6 +1267,15 @@ export default function DesPreseDetailPage() {
                     ? () => transmitir(true) : undefined
                 }
               />
+              {/* Panel de existencias insuficientes — bloquea el SPG OPG2 */}
+              {tr.existenciaCheckOpg2 && !tr.existenciaCheckOpg2.suficiente && (
+                <ExistenciaCheckPanel
+                  titulo="Verificación de existencias OPG2"
+                  check={tr.existenciaCheckOpg2}
+                  onReverificar={() => transmitir(true)}
+                  loading={retrying}
+                />
+              )}
             </div>
           )}
 
@@ -1036,7 +1300,8 @@ export default function DesPreseDetailPage() {
               }
               onReintentarConsumo={
                 !tr.opg1.consumo.exitoso && tr.opg1.orden.exitoso &&
-                (tr.opg2Num === 0 || tr.opg2.entrega.exitoso)
+                (tr.opg2Num === 0 || tr.opg2.entrega.exitoso) &&
+                !tr.existenciaCheck
                   ? () => transmitir(true) : undefined
               }
               onReintentarEntrega={
@@ -1044,6 +1309,14 @@ export default function DesPreseDetailPage() {
                   ? () => transmitir(true) : undefined
               }
             />
+            {/* Panel de existencias insuficientes — bloquea el SPG OPG1 */}
+            {tr.existenciaCheck && !tr.existenciaCheck.suficiente && (
+              <ExistenciaCheckPanel
+                check={tr.existenciaCheck}
+                onReverificar={() => transmitir(true)}
+                loading={retrying}
+              />
+            )}
           </div>
 
           {/* XMLs generados en la transmisión */}

@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
         ppCodigos:                 body.ppCodigos                 || null,
         ppConLote:                 body.ppConLote                 || null,
         productosSinCantAdicional: body.productosSinCantAdicional || null,
+        motivoConsumo:             body.motivoConsumo             || null,
+        motivoEntrega:             body.motivoEntrega             || null,
       },
     });
     return NextResponse.json(registro, { status: 201 });

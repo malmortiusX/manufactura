@@ -46,6 +46,9 @@ export async function GET(req: Request) {
             fecha:          true,
           },
         },
+        _count: {
+          select: { desmarques: true },
+        },
       },
       orderBy: { createdAt: "desc" },
       skip,

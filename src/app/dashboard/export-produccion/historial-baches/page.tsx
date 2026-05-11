@@ -2,6 +2,7 @@
 // src/app/dashboard/export-produccion/historial-baches/page.tsx
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface FiltroSnippet {
@@ -24,6 +25,7 @@ interface OpgLogRow {
   estadoEntregaProduccion:    string;
   intentos:                   number;
   createdAt:                  string;
+  _count?:                    { desmarques: number };
 }
 
 // ── Helpers visuales ──────────────────────────────────────────────────────────
@@ -368,16 +370,17 @@ export default function HistorialBachesPage() {
                     </td>
                   </tr>
                 ) : logs.map((log, idx) => {
-                  const action = rowAction[log.id] ?? "";
-                  const msg    = rowMsg[log.id]    ?? "";
-                  const isEven = idx % 2 === 0;
+                  const action      = rowAction[log.id] ?? "";
+                  const msg         = rowMsg[log.id]    ?? "";
+                  const isEven      = idx % 2 === 0;
+                  const esDesmarcado = (log._count?.desmarques ?? 0) > 0 || action === "ok";
 
                   return (
                     <tr
                       key={log.id}
                       className={`border-b border-slate-50 transition-colors
                         ${isEven ? "bg-white" : "bg-slate-50/30"}
-                        ${action === "ok" ? "!bg-green-50/60" : "hover:bg-slate-50/60"}`}
+                        ${esDesmarcado ? "!bg-green-50/60" : "hover:bg-slate-50/60"}`}
                     >
                       {/* Fecha */}
                       <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
@@ -427,10 +430,10 @@ export default function HistorialBachesPage() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                           </svg>
-                        ) : action === "ok" ? (
+                        ) : esDesmarcado ? (
                           <div className="flex flex-col items-center gap-0.5">
                             <span className="text-xs text-green-600 font-medium">✓ Desmarcado</span>
-                            <span className="text-xs text-slate-400">{msg}</span>
+                            {msg && <span className="text-xs text-slate-400">{msg}</span>}
                           </div>
                         ) : action === "error" ? (
                           <div className="flex flex-col items-center gap-1">
@@ -443,13 +446,26 @@ export default function HistorialBachesPage() {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setModalLog(log)}
-                            className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg
-                                       hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
-                          >
-                            Desmarcar bache
-                          </button>
+                          <div className="flex flex-col gap-1.5 items-center">
+                            {log.filtro &&
+                             (log.filtro.modulo === "produccion-cpp" || log.filtro.modulo === "beneficio") &&
+                             log.estadoEntregaProduccion !== "ENVIADO" && (
+                              <Link
+                                href={`/dashboard/export-produccion/${log.filtro.modulo}/${log.filtro.id}?bache=${log.numeroBache}`}
+                                className="text-xs border border-blue-200 text-blue-600 px-3 py-1.5 rounded-lg
+                                           hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors"
+                              >
+                                Continuar
+                              </Link>
+                            )}
+                            <button
+                              onClick={() => setModalLog(log)}
+                              className="text-xs border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg
+                                         hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
+                            >
+                              Desmarcar bache
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

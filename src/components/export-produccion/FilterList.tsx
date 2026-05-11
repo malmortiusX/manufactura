@@ -29,6 +29,8 @@ export interface FilterSet {
   ppCodigos: string | null;
   ppConLote: string | null;
   productosSinCantAdicional: string | null;
+  motivoConsumo: string | null;
+  motivoEntrega: string | null;
 }
 
 export type ModuloKey =
@@ -122,6 +124,8 @@ const emptyForm = {
   ppCodigos: "",
   ppConLote: "",
   productosSinCantAdicional: "",
+  motivoConsumo: "",
+  motivoEntrega: "",
 };
 
 export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
@@ -196,6 +200,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
       ppCodigos:                 item.ppCodigos                 ?? "",
       ppConLote:                 item.ppConLote                 ?? "",
       productosSinCantAdicional: item.productosSinCantAdicional ?? "",
+      motivoConsumo:             item.motivoConsumo             ?? "",
+      motivoEntrega:             item.motivoEntrega             ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -501,6 +507,31 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                 <Field label="Producto en proceso para OPG" name="ppCodigos" value={form.ppCodigos} onChange={handleChange} maxLength={200} placeholder="Ej: PP00002" />
                 <Field label="PP con lote en el consumo" name="ppConLote" value={form.ppConLote} onChange={handleChange} maxLength={200} placeholder="Ej: PP00001, PP00002, PP00003" />
                 <Field label="Productos sin cantidad adicional" name="productosSinCantAdicional" value={form.productosSinCantAdicional} onChange={handleChange} maxLength={500} placeholder="Ej: PR00001, PR00002" />
+              </div>
+            </>
+          )}
+
+          {(modulo === "beneficio" || modulo === "produccion-cpp" || modulo === "produccion-spp") && (
+            <>
+              <div className="my-6 border-t border-slate-100" />
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+                  Consumo de producción
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-green-100">
+                <Field label="Motivo" name="motivoConsumo" value={form.motivoConsumo} onChange={handleChange} maxLength={2} placeholder="Ej: 01" mono />
+              </div>
+              <div className="my-6 border-t border-slate-100" />
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-teal-400 inline-block" />
+                  Entrega de producción
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-teal-100">
+                <Field label="Motivo" name="motivoEntrega" value={form.motivoEntrega} onChange={handleChange} maxLength={2} placeholder="Ej: 01" mono />
               </div>
             </>
           )}
