@@ -612,6 +612,31 @@ async function enviarLotesIndividual(
 }
 
 // ── Consecutivo OPG desde Prisma (sin HTTP) ───────────────────────────────
+// ── Recupera ppItems desde el XML1b guardado en BD (para reintentos) ────────
+// Cuando en un reintento los componentes de OPG1 ya muestran cantidadPendiente1=0
+// para los productos PP (porque OPG1 ya fue consumida), ppItems queda vacío y la
+// EPG de OPG2 no tendría líneas. Este parser extrae los ítems directamente del
+// XML1b que se usó para CREAR OPG2, garantizando que la entrega siempre coincida.
+//
+// Offsets dentro de cada línea 851 (calculados desde buildXML1b):
+//   7-10   tipo de registro "0851"
+//  49-98   f851_referencia_item (50 chars, sin ceros iniciales)
+// 159-162  f851_id_unidad (4 chars)
+// 171-190  f851_cantidad (pQ 15,4 → 20 chars incluyendo punto decimal)
+// 220-234  f851_id_lote (15 chars)
+function parsePpItemsFromXml1b(xml1b: string): PpItem[] {
+  const items: PpItem[] = [];
+  for (const line of xml1b.split("\n")) {
+    if (line.length < 235 || line.slice(7, 11) !== "0851") continue;
+    const codigo   = line.slice(49, 99).trim();
+    const unidad   = line.slice(159, 163).trim();
+    const cantidad = parseFloat(line.slice(171, 191)) || 0;
+    const lote     = line.slice(220, 235).trim();
+    if (codigo && cantidad > 0) items.push({ codigo, cantidad, unidad, lote });
+  }
+  return items;
+}
+
 async function nextConsecOpg(): Promise<number> {
   const rec = await prisma.consecutivo.upsert({
     where:  { tipoDocumento: "OPG" },
@@ -816,6 +841,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         opg1Componentes = [];
         ppItems         = [];
         ppEntregaItems  = [];
+      }
+
+      // ── Recuperación ppItems en reintento ────────────────────────────────
+      // Si OPG1 ya fue consumida (cantidadPendiente1=0 para PP), ppItems queda
+      // vacío y la EPG de OPG2 no tendría líneas de producto. Se recupera desde
+      // el XML1b almacenado en BD, que refleja exactamente lo que se planificó.
+      if (ppItems.length === 0 && bodyLogId2 && log2State?.xml1) {
+        ppItems        = parsePpItemsFromXml1b(log2State.xml1);
+        ppEntregaItems = ppItems;
       }
 
       // ── ¿Hay subproductos PP? → rama OPG2 ────────────────────────────────
