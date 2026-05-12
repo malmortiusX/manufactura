@@ -173,8 +173,8 @@ function buildXML2(
       pA(motivoConsumo,         2) +
       pA(centroOperacion,       3) +
       pA("31",  20) +
-      pA("70010401",           15) +
       pA(ccostoMovto,          15) +
+      pA("",                   15) +
       pA(comp.hijoUnidad,       4) +
       pQ(comp.cantidadPendiente1, 15, 4) +
       pQ(comp.cantidadPendiente2,     15, 4) +
@@ -244,8 +244,8 @@ function buildXML2ConLotes(
     pA(motivoConsumo,         2) +
     pA(centroOperacion,       3) +
     pA("31",  20) +
-    pA("70010401",           15) +
     pA(ccostoMovto,          15) +
+    pA("",                   15) +
     pA(ln.hijoUnidad,         4) +
     pQ(ln.cantidad1,         15, 4) +
     pQ(ln.cantidad2,         15, 4) +
@@ -976,13 +976,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             if (existenciasOk) {
               if (lotesParaConsumo && lotesParaConsumo.length > 0) {
                 xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
-                throw new Error("Parardo para revisión de lotes en consumo OPG1"); // No enviar aún, esperar validación del usuario
               } else {
                 xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
-                throw new Error("Parardo para revisión de lotes en consumo OPG1"); // No enviar aún, esperar validación del usuario
               }
-              // await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
-              // consumoOpg1Result = await callSoap(xml2);
+              await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
+              consumoOpg1Result = await callSoap(xml2);
             }
           } catch (e) { consumoOpg1Result = mkErr(e); }
         }
