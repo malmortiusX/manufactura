@@ -882,6 +882,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               // Paso D: items de comparación — uno por (Bodega_id, Referencia)
               // Se agrega el disponible total de todos los lotes para que el usuario
               // vea claramente cuánto hay vs cuánto se necesita consumir.
+              // Se redondea a 4 decimales para evitar falsos negativos por punto flotante.
+              const r4 = (n: number) => Math.round(n * 10000) / 10000;
               const items: ExistenciaComparacion[] = [];
               for (const [needKey, need] of needMap.entries()) {
                 const totalDisp = availMap.get(needKey) ?? 0;
@@ -892,7 +894,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   disponible1: totalDisp,
                   disponible2: 0,
                   aConsumir1:  need.pendiente1,
-                  suficiente:  totalDisp >= need.pendiente1,
+                  suficiente:  r4(totalDisp) >= r4(need.pendiente1),
                 });
               }
 

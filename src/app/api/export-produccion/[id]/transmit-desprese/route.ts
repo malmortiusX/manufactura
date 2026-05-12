@@ -951,6 +951,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                     const invItems   = await queryInventarioRef(bodegaConsulta, ref);
                     const exist1     = invItems.reduce((s, it) => s + it.exist1, 0);
                     const descripcion = invItems[0]?.descripcion?.trim() ?? "";
+                    const r4opg2 = (n: number) => Math.round(n * 10000) / 10000;
                     itemsOpg2.push({
                       bodegaId:    bodegaConsulta,
                       referencia:  ref,
@@ -959,7 +960,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                       disponible1: exist1,
                       disponible2: 0,
                       aConsumir1:  need.aConsumir1,
-                      suficiente:  exist1 >= need.aConsumir1,
+                      suficiente:  r4opg2(exist1) >= r4opg2(need.aConsumir1),
                     });
                   }
 
@@ -1137,6 +1138,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               }
 
               // ── Paso D: construir items de comparación (uno por posición de stock) ─
+              // Se redondea a 4 decimales antes de comparar para evitar falsos
+              // negativos por errores de punto flotante (ej. 3494.9899999... < 3494.99).
+              const r4 = (n: number) => Math.round(n * 10000) / 10000;
               const items: ExistenciaComparacion[] = [];
               for (const pos of stockMap.values()) {
                 const needKey    = `${pos.bodegaId}\x00${pos.referencia}`;
@@ -1149,7 +1153,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   disponible1: pos.disponible1,
                   disponible2: pos.disponible2,
                   aConsumir1,
-                  suficiente:  totalDisp >= aConsumir1,
+                  suficiente:  r4(totalDisp) >= r4(aConsumir1),
                 });
               }
 
