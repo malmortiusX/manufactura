@@ -979,14 +979,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             if (existenciasOk) {
               if (lotesParaConsumo && lotesParaConsumo.length > 0) {
                 xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
-                throw new Error("Parardo para revisión de lotes en consumo OPG1"); // No enviar aún, esperar validación del usuario
+                // throw new Error("Parardo para revisión de lotes en consumo OPG1"); // No enviar aún, esperar validación del usuario
               } else {
                 xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, ppEntregaItems, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
-                throw new Error("Parardo para revisión de lotes en consumo OPG1"); // No enviar aún, esperar validación del usuario
+                // throw new Error("Parardo para revisión de lotes en consumo OPG1"); // No enviar aún, esperar validación del usuario
 
               }
-              // await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
-              // consumoOpg1Result = await callSoap(xml2);
+              await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
+              consumoOpg1Result = await callSoap(xml2);
             }
           } catch (e) { consumoOpg1Result = mkErr(e); }
         }
