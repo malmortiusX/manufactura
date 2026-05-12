@@ -173,8 +173,8 @@ function buildXML2(
       pA(motivoConsumo,         2) +
       pA(centroOperacion,       3) +
       pA("31",  20) +
+      pA("70010401",           15) +
       pA(ccostoMovto,          15) +
-      pA("",          15) +
       pA(comp.hijoUnidad,       4) +
       pQ(comp.cantidadPendiente1, 15, 4) +
       pQ(comp.cantidadPendiente2,     15, 4) +
@@ -244,8 +244,8 @@ function buildXML2ConLotes(
     pA(motivoConsumo,         2) +
     pA(centroOperacion,       3) +
     pA("31",  20) +
+    pA("70010401",           15) +
     pA(ccostoMovto,          15) +
-    pA("",          15) +
     pA(ln.hijoUnidad,         4) +
     pQ(ln.cantidad1,         15, 4) +
     pQ(ln.cantidad2,         15, 4) +
@@ -951,10 +951,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   }
                 }
 
-                // Fallback: componentes no devueltos por el WS
-                const refsEnNeed = new Set([...needMap.keys()].map((k) => k.split("\x00")[1]));
+                // Fallback: componentes no devueltos por el WS (verificar por bodega+referencia
+                // para no perder componentes cuya bodega difiere de la que devolvió el WS)
+                const keysEnNeed = new Set(needMap.keys()); // ya son "bodegaId\x00referencia"
                 for (const comp of componentes1ToConsume) {
-                  if (!refsEnNeed.has(comp.hijoReferencia.trim())) {
+                  const compKey = `${comp.bodegaId.trim()}\x00${comp.hijoReferencia.trim()}`;
+                  if (!keysEnNeed.has(compKey)) {
                     lineas.push({
                       padreReferencia: comp.padreReferencia.trim(),
                       hijoReferencia:  comp.hijoReferencia.trim(),
