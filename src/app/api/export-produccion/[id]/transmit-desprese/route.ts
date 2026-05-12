@@ -216,6 +216,7 @@ function buildXML2(
       pA(centroOperacion,       3) +
       pA("31",  20) +
       pA(ccostoMovto,          15) +
+      pA("",                   15) +
       pA(comp.hijoUnidad,       4) +
       pQ(comp.cantidadPendiente1, 15, 4) +
       pQ(comp.cantidadPendiente2, 15, 4) +
@@ -1134,78 +1135,74 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 existenciasOk   = false;
                 // consumoOpg1Result queda en PENDIENTE — no se envía el SPG
               } else {
-                // ── Distribuir el consumo FIFO por lotes ────────────────────────
-                // Toda la información viene de la misma respuesta del WS:
-                //   needMap → cuánto hay que consumir por (bodegaId, referencia)
-                //   stockMap → posiciones de stock por (bodegaId, referencia, lote)
-
-                // Lookup: referencia → padreReferencia (de componentes OPG1) y unidad
-                const refToPadre  = new Map<string, string>();
-                const refToUnidad = new Map<string, string>();
-                for (const comp of opg1Componentes) {
-                  const ref = comp.hijoReferencia.trim();
-                  if (!refToPadre.has(ref))  refToPadre.set(ref,  comp.padreReferencia.trim());
-                  if (!refToUnidad.has(ref)) refToUnidad.set(ref, comp.hijoUnidad.trim());
-                }
-                for (const e of existencias) {
-                  const ref = e.referencia.trim();
-                  if (!refToUnidad.has(ref)) refToUnidad.set(ref, e.unidad.trim());
-                }
-
-                // Agrupar posiciones por (bodegaId, referencia), ordenar lote asc
-                const stockByKey = new Map<string, Array<{ lote: string; disponible1: number }>>();
+                // ── Distribuir el consumo FIFO por lotes ──────────────────
+                // Stock mutable por (bodegaId\x00referencia\x00lote).
+                // Se comparte entre todos los padres que consumen el mismo hijo,
+                // de modo que cada padre ve el remanente que dejaron los anteriores.
+                type StockPos = { lote: string; remaining: number };
+                const stockMutable = new Map<string, StockPos[]>();
                 for (const pos of stockMap.values()) {
                   const key = `${pos.bodegaId}\x00${pos.referencia}`;
-                  const arr = stockByKey.get(key) ?? [];
-                  arr.push({ lote: pos.lote, disponible1: pos.disponible1 });
-                  stockByKey.set(key, arr);
+                  const arr = stockMutable.get(key) ?? [];
+                  arr.push({ lote: pos.lote, remaining: pos.disponible1 });
+                  stockMutable.set(key, arr);
                 }
-                for (const arr of stockByKey.values()) {
-                  arr.sort((a, b) => a.lote.localeCompare(b.lote));
+                // Ordenar FIFO: lote vacío primero (sin lote), luego por código de lote
+                for (const arr of stockMutable.values()) {
+                  arr.sort((a, b) => {
+                    if (a.lote === "" && b.lote !== "") return -1;
+                    if (a.lote !== "" && b.lote === "") return  1;
+                    return a.lote.localeCompare(b.lote);
+                  });
                 }
 
-                // Construir una línea de consumo por cada lote utilizado
                 const lineas: Xml2Line[] = [];
-                for (const [key, need] of needMap.entries()) {
-                  const positions = stockByKey.get(key) ?? [];
-                  const padre     = refToPadre.get(need.referencia)  ?? "";
-                  const unidad    = refToUnidad.get(need.referencia) ?? "KIL";
-                  let rem1        = need.pendiente1;
-                  const total1    = need.pendiente1;
 
+                // Iterar componentes directamente para conservar la relación padre-hijo
+                for (const comp of componentes1ToConsume) {
+                  const padre  = comp.padreReferencia.trim();
+                  const hijo   = comp.hijoReferencia.trim();
+                  const bodega = comp.bodegaId.trim();
+                  const unidad = comp.hijoUnidad.trim();
+                  const key    = `${bodega}\x00${hijo}`;
+
+                  const positions = stockMutable.get(key);
+
+                  // Producto sin información de lotes en el WS → línea simple
+                  if (!positions || positions.every(p => p.lote === "")) {
+                    lineas.push({
+                      padreReferencia: padre,
+                      hijoReferencia:  hijo,
+                      bodegaId:        bodega,
+                      lote:            "",
+                      hijoUnidad:      unidad,
+                      cantidad1:       comp.cantidadPendiente1,
+                      cantidad2:       comp.cantidadPendiente2,
+                    });
+                    continue;
+                  }
+
+                  // Producto con lotes → distribuir FIFO consumiendo stock global
+                  let rem1       = comp.cantidadPendiente1;
+                  const total1   = comp.cantidadPendiente1;
                   for (const pos of positions) {
                     if (rem1 <= 0.00001) break;
-                    const take1 = Math.min(pos.disponible1, rem1);
-                    // Segunda unidad: proporcional al consumo de la primera
-                    const take2 = total1 > 0 && need.pendiente2 > 0
-                      ? Math.round((need.pendiente2 * (take1 / total1)) * 10000) / 10000
+                    if (pos.remaining <= 0.00001) continue;
+                    const take1 = Math.min(pos.remaining, rem1);
+                    const take2 = total1 > 0 && comp.cantidadPendiente2 > 0
+                      ? Math.round((comp.cantidadPendiente2 * (take1 / total1)) * 10000) / 10000
                       : 0;
                     lineas.push({
                       padreReferencia: padre,
-                      hijoReferencia:  need.referencia,
-                      bodegaId:        need.bodegaId,
+                      hijoReferencia:  hijo,
+                      bodegaId:        bodega,
                       lote:            pos.lote,
                       hijoUnidad:      unidad,
                       cantidad1:       take1,
                       cantidad2:       take2,
                     });
-                    rem1 -= take1;
-                  }
-                }
-
-                // Fallback: componentes que el WS no devolvió en existencias
-                const refsEnNeed = new Set([...needMap.keys()].map((k) => k.split("\x00")[1]));
-                for (const comp of componentes1ToConsume) {
-                  if (!refsEnNeed.has(comp.hijoReferencia.trim())) {
-                    lineas.push({
-                      padreReferencia: comp.padreReferencia.trim(),
-                      hijoReferencia:  comp.hijoReferencia.trim(),
-                      bodegaId:        comp.bodegaId.trim(),
-                      lote:            "",
-                      hijoUnidad:      comp.hijoUnidad.trim(),
-                      cantidad1:       comp.cantidadPendiente1,
-                      cantidad2:       comp.cantidadPendiente2,
-                    });
+                    pos.remaining -= take1;
+                    rem1          -= take1;
                   }
                 }
 
