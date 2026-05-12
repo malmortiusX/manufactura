@@ -879,35 +879,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 availMap.set(key, (availMap.get(key) ?? 0) + pos.disponible1);
               }
 
-              // Paso D: items de comparación (uno por posición de stock)
+              // Paso D: items de comparación — uno por (Bodega_id, Referencia)
+              // Se agrega el disponible total de todos los lotes para que el usuario
+              // vea claramente cuánto hay vs cuánto se necesita consumir.
               const items: ExistenciaComparacion[] = [];
-              for (const pos of stockMap.values()) {
-                const needKey    = `${pos.bodegaId}\x00${pos.referencia}`;
-                const aConsumir1 = needMap.get(needKey)?.pendiente1 ?? 0;
-                const totalDisp  = availMap.get(needKey) ?? 0;
+              for (const [needKey, need] of needMap.entries()) {
+                const totalDisp = availMap.get(needKey) ?? 0;
                 items.push({
-                  bodegaId:    pos.bodegaId,
-                  referencia:  pos.referencia,
-                  lote:        pos.lote,
-                  disponible1: pos.disponible1,
-                  disponible2: pos.disponible2,
-                  aConsumir1,
-                  suficiente:  totalDisp >= aConsumir1,
+                  bodegaId:    need.bodegaId,
+                  referencia:  need.referencia,
+                  lote:        "",
+                  disponible1: totalDisp,
+                  disponible2: 0,
+                  aConsumir1:  need.pendiente1,
+                  suficiente:  totalDisp >= need.pendiente1,
                 });
-              }
-              for (const [key, need] of needMap.entries()) {
-                const hasStock = [...stockMap.keys()].some((k) => k.startsWith(key + "\x00"));
-                if (!hasStock && need.pendiente1 > 0) {
-                  items.push({
-                    bodegaId:    need.bodegaId,
-                    referencia:  need.referencia,
-                    lote:        "",
-                    disponible1: 0,
-                    disponible2: 0,
-                    aConsumir1:  need.pendiente1,
-                    suficiente:  false,
-                  });
-                }
               }
 
               const todoSuficiente = items.every((i) => i.suficiente);

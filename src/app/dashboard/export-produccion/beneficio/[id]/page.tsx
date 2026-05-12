@@ -514,8 +514,16 @@ function ExistenciaCheckPanel({
   onReverificar: () => void;
   loading:       boolean;
 }) {
+  const insuficientes = check.items.filter((i) => !i.suficiente).length;
+  // Insuficientes primero, luego suficientes
+  const itemsOrdenados = [
+    ...check.items.filter((i) => !i.suficiente),
+    ...check.items.filter((i) =>  i.suficiente),
+  ];
+
   return (
     <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
+      {/* Encabezado */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-red-100 bg-red-50">
         <div className="flex items-center gap-2">
           <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -523,7 +531,10 @@ function ExistenciaCheckPanel({
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <span className="text-xs font-semibold text-red-700 uppercase tracking-wider">
-            Verificación de existencias OPG1
+            Existencias insuficientes — Consumo OPG1
+          </span>
+          <span className="text-xs font-semibold bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded-full">
+            {insuficientes} {insuficientes === 1 ? "producto" : "productos"} sin stock suficiente
           </span>
         </div>
         <button
@@ -541,11 +552,12 @@ function ExistenciaCheckPanel({
           {loading ? "Verificando…" : "Re-verificar y continuar"}
         </button>
       </div>
+
+      {/* Cuerpo */}
       <div className="p-4 space-y-3">
         <p className="text-xs text-red-600">
-          Las referencias marcadas en rojo no tienen suficiente existencia disponible en el ERP.
-          Ajuste las cantidades en el sistema y luego presione{" "}
-          <strong>Re-verificar y continuar</strong>.
+          El consumo de la OPG1 fue bloqueado porque uno o más productos no tienen existencia suficiente en el ERP.
+          Ajuste las cantidades en el sistema y presione <strong>Re-verificar y continuar</strong>.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -553,51 +565,56 @@ function ExistenciaCheckPanel({
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Bodega</th>
                 <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Referencia</th>
-                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Lote</th>
                 <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">A consumir</th>
                 <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Disponible</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Diferencia</th>
                 <th className="text-center px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {check.items.map((item, i) => (
-                <tr key={i} className={item.suficiente ? "" : "bg-red-50"}>
-                  <td className={`px-3 py-2 font-mono text-xs ${item.suficiente ? "text-slate-500" : "text-red-600"}`}>
-                    {item.bodegaId || <span className="italic text-slate-400">—</span>}
-                  </td>
-                  <td className={`px-3 py-2 font-mono ${item.suficiente ? "text-slate-700" : "text-red-700 font-semibold"}`}>
-                    {item.referencia}
-                  </td>
-                  <td className={`px-3 py-2 ${item.suficiente ? "text-slate-500" : "text-red-600"}`}>
-                    {item.lote || <span className="italic text-slate-400">sin lote</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                    {fmtNum(item.aConsumir1)}
-                  </td>
-                  <td className={`px-3 py-2 text-right tabular-nums font-medium ${
-                    item.suficiente ? "text-slate-700" : "text-red-700"
-                  }`}>
-                    {fmtNum(item.disponible1)}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    {item.suficiente ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                        OK
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        Insuficiente
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {itemsOrdenados.map((item, i) => {
+                const diff = item.disponible1 - item.aConsumir1;
+                return (
+                  <tr key={i} className={item.suficiente ? "bg-emerald-50" : "bg-red-50"}>
+                    <td className={`px-3 py-2 font-mono text-xs ${item.suficiente ? "text-emerald-700" : "text-red-600"}`}>
+                      {item.bodegaId || <span className="italic text-slate-400">—</span>}
+                    </td>
+                    <td className={`px-3 py-2 font-mono font-semibold ${item.suficiente ? "text-emerald-800" : "text-red-800"}`}>
+                      {item.referencia}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium">
+                      {fmtNum(item.aConsumir1)}
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                      item.suficiente ? "text-emerald-700" : "text-red-700"
+                    }`}>
+                      {fmtNum(item.disponible1)}
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                      item.suficiente ? "text-emerald-600" : "text-red-600"
+                    }`}>
+                      {diff >= 0 ? "+" : ""}{fmtNum(diff)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {item.suficiente ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          OK
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700 border border-red-300">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Insuficiente
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
