@@ -970,11 +970,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
           if (consumoOpg2Result.exitoso) {
 
-            // ── Paso 5: Crear lotes de ppEntregaItems antes de EPG OPG2 ────
-            const rowsPP: RowXml3[] = ppEntregaItems.map((p) => ({
-              CODIGO_PRODUCTO: p.codigo, LOTE_PRODUCTO: p.lote,
-              BODEGA: filtro.bodegaItemPadre?.trim() ?? "",
-              UNIDAD_PRODUCTO: p.unidad, KIL: p.cantidad, UND: 0,
+            // ── Paso 5: Filas EPG OPG2 — mismos ítems con los que se creó OPG2 ──
+            // ppItems son exactamente los productos y cantidades enviados en la
+            // orden de producción OPG2 (buildXML1b). La entrega debe coincidir
+            // con esa planificación para que el consumo de OPG1 pueda ejecutarse.
+            const rowsPP: RowXml3[] = ppItems.map((p) => ({
+              CODIGO_PRODUCTO: p.codigo,
+              LOTE_PRODUCTO:   p.lote,
+              BODEGA:          filtro.bodegaItemPadre?.trim() ?? "",
+              UNIDAD_PRODUCTO: p.unidad,
+              KIL:             p.cantidad,
+              UND:             0,
             }));
             try {
               const ppEntregaLotes: ProductoLote[] = Array.from(
