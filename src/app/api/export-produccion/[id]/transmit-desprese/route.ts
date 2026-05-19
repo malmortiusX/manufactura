@@ -16,7 +16,7 @@ import {
   callSoap,
   queryComponentesOP,
   queryExistenciaLote,
-  queryInventarioRef,
+  queryInventarioRefLote,
   type DocResult,
   type ComponenteOP,
 } from "@/lib/erp-soap";
@@ -334,10 +334,6 @@ function buildXML2Consumo(
     pA("OPG", 3) +
     pN(consecOpg, 8);
 
-  const fechaSalida = new Date(2026, 4, 1);
-  const loteSaldoInicial = "P26ERP";
-  const productosLoteQuemado = new Set(["MPS250022", "MPS250023", "MPS250024", "MPS250025", "MPS250026", "MPS250027", "MPS250028", "MPS010002", "MPS050001", "MPS070002", "MPS100006", "MPS100012", "MPS100013", "MPS220001", "MPS220002", "MPS220003", "MPS220004", "MPS090003", "MPS220005", "MPS030001"]); 
-
   const productLines = rows.map((row, i) =>
     pN(i + 3,  7) + pN(470, 4) + pN(0, 2) + pN(4, 2) + pN(1, 3) +
     pA(centroOperacion,      3) +
@@ -353,14 +349,14 @@ function buildXML2Consumo(
     pA("",    20) + pA("",    20) + pA("",    20) +
     pA(bodegaItemPadre,      5) +   // f470_id_bodega = bodegaItemPadre del filtro
     pA("",    10) +
-    pA(loteEsMasAntiguo(row.LOTE_PRODUCTO.trim(), fechaSalida) ? loteSaldoInicial : (productosLoteQuemado.has(row.CODIGO_PRODUCTO.trim()) ? loteSaldoInicial : row.LOTE_PRODUCTO),   15) +   // f470_id_lote = lote del producto consumido
+    pA(row.LOTE_PRODUCTO.trim(), 15) +              // f470_id_lote = lote del WS (directo)
     pN(701,    3) +
     pA(motivoConsumo,        2) +
     pA(centroOperacion,      3) +
     pA("31",  20) +
     pA(ccostoMovto,         15) +
     pA("",          15) +
-    pA((row.UNIDAD_PRODUCTO.trim() == "KG") ? "KIL" : row.UNIDAD_PRODUCTO,  4) +
+    pA((row.UNIDAD_PRODUCTO.trim() === "KG") ? "KIL" : row.UNIDAD_PRODUCTO.trim(), 4) +
     pQ(Number(row.KIL), 15, 4) +
     pQ(Number(row.UND), 15, 4) +
     pA("",   255) +
@@ -915,78 +911,123 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (ordenOpg2Result.exitoso) {
 
           // ── Paso 4: SPG OPG2 (saltar si ya fue enviado) ───────────────
-          // clase_op=004 (sin lista de materiales): usa los registros de consumo
-          // seleccionados por el usuario. Bodega = bodegaItemPadre; lote = del producto.
+          // clase_op=004 (sin lista de materiales): se consultan los lotes disponibles
+          // en bodegaItemPadre por cada referencia seleccionada por el usuario, se
+          // verifica que el stock total sea suficiente y se distribuye FIFO (lote más
+          // antiguo primero) para construir el XML de consumo.
           if (log2State?.estadoConsumoProduccion === "ENVIADO") {
             consumoOpg2Result = skip(log2State.respuestaConsumoProduccion);
           } else {
             try {
               if (rowsConsumo.length > 0) {
-                // ── Verificar existencias OPG2 antes de consumir ─────────────────
-                // Consulta WS_FENIX_INVENTARIO_REF por cada referencia única en los
-                // registros de consumo, usando bodegaItemPadre como bodega de consulta
-                // (que es la misma bodega que se usa en el XML de consumo).
-                // Si alguna referencia no tiene suficiente stock se bloquea el SPG y
-                // se devuelve existenciaCheckOpg2 al cliente para que ajuste en ERP.
-                let existenciasOpg2Ok = true;
-                try {
-                  const bodegaConsulta = filtro.bodegaItemPadre?.trim() ?? "";
+                const bodegaConsulta = filtro.bodegaItemPadre?.trim() ?? "";
+                const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
-                  // Sumar KIL a consumir por referencia
-                  type NeedOpg2 = { referencia: string; aConsumir1: number };
-                  const needMapOpg2 = new Map<string, NeedOpg2>();
-                  for (const row of rowsConsumo) {
-                    const ref  = row.CODIGO_PRODUCTO.trim();
-                    const prev = needMapOpg2.get(ref);
-                    if (!prev) {
-                      needMapOpg2.set(ref, { referencia: ref, aConsumir1: Number(row.KIL) });
-                    } else {
-                      prev.aConsumir1 += Number(row.KIL);
-                    }
+                // ── A: sumar cantidades seleccionadas por referencia ──────────
+                type NeedEntry = { total1: number; total2: number };
+                const needByRef = new Map<string, NeedEntry>();
+                for (const row of rowsConsumo) {
+                  const ref  = row.CODIGO_PRODUCTO.trim();
+                  const prev = needByRef.get(ref);
+                  if (!prev) {
+                    needByRef.set(ref, { total1: Number(row.KIL), total2: Number(row.UND) });
+                  } else {
+                    prev.total1 += Number(row.KIL);
+                    prev.total2 += Number(row.UND);
                   }
+                }
 
-                  // Consultar inventario para cada referencia
-                  const itemsOpg2: ExistenciaComparacion[] = [];
-                  for (const [ref, need] of needMapOpg2.entries()) {
-                    const invItems   = await queryInventarioRef(bodegaConsulta, ref);
-                    const exist1     = invItems.reduce((s, it) => s + it.exist1, 0);
-                    const descripcion = invItems[0]?.descripcion?.trim() ?? "";
-                    const r4opg2 = (n: number) => Math.round(n * 10000) / 10000;
+                // ── B: consultar lotes disponibles por referencia (WS_FENIX_INVENTARIO_REF_LOTE) ─
+                // El WS devuelve los lotes ya ordenados por Fecha_creacion ascendente
+                // (más antiguo primero) en queryInventarioRefLote.
+                type LoteDisp = { lote: string; unidInv1: string; disponible1: number; disponible2: number };
+                const lotesByRef = new Map<string, LoteDisp[]>();
+                for (const ref of needByRef.keys()) {
+                  const lotes = await queryInventarioRefLote(bodegaConsulta, ref);
+                  lotesByRef.set(ref, lotes.map((l) => ({
+                    lote:        l.lote,
+                    unidInv1:    l.unidInv1,
+                    disponible1: l.disponible1,
+                    disponible2: l.disponible2,
+                  })));
+                }
+
+                // ── C: verificar existencias — total disponible >= total a consumir ─
+                // Se muestra una fila por lote para que el usuario vea la distribución.
+                const itemsOpg2: ExistenciaComparacion[] = [];
+                let existenciasOpg2Ok = true;
+
+                for (const [ref, need] of needByRef.entries()) {
+                  const lotes     = lotesByRef.get(ref) ?? [];
+                  const totalDisp = lotes.reduce((s, l) => s + l.disponible1, 0);
+                  const suficiente = r4(totalDisp) >= r4(need.total1);
+                  if (!suficiente) existenciasOpg2Ok = false;
+
+                  if (lotes.length > 0) {
+                    for (const lote of lotes) {
+                      itemsOpg2.push({
+                        bodegaId:    bodegaConsulta,
+                        referencia:  ref,
+                        lote:        lote.lote,
+                        disponible1: lote.disponible1,
+                        disponible2: lote.disponible2,
+                        aConsumir1:  need.total1,
+                        suficiente,
+                      });
+                    }
+                  } else {
+                    // Sin lotes: mostrar fila con disponible = 0
                     itemsOpg2.push({
                       bodegaId:    bodegaConsulta,
                       referencia:  ref,
-                      descripcion,
                       lote:        "",
-                      disponible1: exist1,
+                      disponible1: 0,
                       disponible2: 0,
-                      aConsumir1:  need.aConsumir1,
-                      suficiente:  r4opg2(exist1) >= r4opg2(need.aConsumir1),
+                      aConsumir1:  need.total1,
+                      suficiente:  false,
                     });
+                    existenciasOpg2Ok = false;
+                  }
+                }
+
+                if (!existenciasOpg2Ok) {
+                  existenciaCheckOpg2 = { items: itemsOpg2, suficiente: false };
+                  // consumoOpg2Result queda en PENDIENTE — no se envía el SPG
+                } else {
+                  // ── D: distribuir FIFO y construir XML de consumo OPG2 ────────
+                  // Por cada referencia se consumen los lotes de más antiguo a más
+                  // reciente hasta cubrir la cantidad total requerida. La cantidad2
+                  // (UND) se distribuye proporcionalmente respecto a la cantidad1.
+                  const fifoRows: RowXml3[] = [];
+
+                  for (const [ref, need] of needByRef.entries()) {
+                    const lotes  = lotesByRef.get(ref) ?? [];
+                    let rem1     = need.total1;
+                    const total1 = need.total1;
+
+                    for (const lote of lotes) {
+                      if (rem1 <= 0.00001) break;
+                      if (lote.disponible1 <= 0.00001) continue;
+                      const take1 = Math.min(lote.disponible1, rem1);
+                      const take2 = total1 > 0 && need.total2 > 0
+                        ? Math.round((need.total2 * (take1 / total1)) * 10000) / 10000
+                        : 0;
+                      fifoRows.push({
+                        CODIGO_PRODUCTO: ref,
+                        LOTE_PRODUCTO:   lote.lote,
+                        BODEGA:          bodegaConsulta,
+                        UNIDAD_PRODUCTO: lote.unidInv1,
+                        KIL:             take1,
+                        UND:             take2,
+                      });
+                      rem1 -= take1;
+                    }
                   }
 
-                  const todoOpg2Suficiente = itemsOpg2.every((i) => i.suficiente);
-                  if (!todoOpg2Suficiente) {
-                    existenciaCheckOpg2 = { items: itemsOpg2, suficiente: false };
-                    existenciasOpg2Ok   = false;
-                    // consumoOpg2Result queda en PENDIENTE — no se envía el SPG
-                  }
-                } catch { /* si falla la consulta, continuar con el SPG de todas formas */ }
-
-                if (existenciasOpg2Ok) {
-                  // Sumar cantidades por código + bodega + lote antes de generar el XML
-                  const rowsConsumoAgregados = Object.values(
-                    rowsConsumo.reduce<Record<string, RowXml3>>((acc, row) => {
-                      const key = `${row.CODIGO_PRODUCTO}|${row.BODEGA}|${row.LOTE_PRODUCTO ?? ""}`;
-                      if (!acc[key]) acc[key] = { ...row, KIL: 0, UND: 0 };
-                      acc[key].KIL = Number(acc[key].KIL) + Number(row.KIL);
-                      acc[key].UND = Number(acc[key].UND) + Number(row.UND);
-                      return acc;
-                    }, {})
-                  );
                   xml2b = buildXML2Consumo(
                     co, filtro.nombre, fecha, consecOpg2,
-                    rowsConsumoAgregados,
-                    filtro.bodegaItemPadre?.trim() ?? "",
+                    fifoRows,
+                    bodegaConsulta,
                     ppCodigo,
                     filtro.motivoConsumo?.trim() ?? "",
                     ccostoConsumo,
@@ -995,6 +1036,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   consumoOpg2Result = await callSoap(xml2b);
                 }
               } else {
+                // Sin registros seleccionados: usar componentes del ERP (fallback)
                 const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
                 xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
                 await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });

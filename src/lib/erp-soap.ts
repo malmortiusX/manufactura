@@ -422,6 +422,127 @@ export async function queryComponentesOP(
   }
 }
 
+// ── Tipo: ítem de inventario por referencia y lote ──────────────────────────
+export interface InventarioRefLoteItem {
+  lote:          string;   // Lote                  (trimmed)
+  fechaCreacion: string;   // Fecha_creacion ISO     (trimmed, para ordenar FIFO)
+  unidInv1:      string;   // Unid_Inv1             (trimmed)
+  unidInv2:      string;   // Unid_Inv2             (trimmed)
+  disponible1:   number;   // Cantidad_disponible1
+  disponible2:   number;   // Cantidad_disponible2
+}
+
+// ── Envelope para WS_FENIX_INVENTARIO_REF_LOTE ────────────────────────────
+function buildInventarioRefLoteEnvelope(bodegaId: string, referencia: string): string {
+  const conexion = process.env.ERP_CONEXION ?? "";
+  const cia      = process.env.ERP_CIA      ?? "1";
+  const usuario  = process.env.ERP_USUARIO  ?? "";
+  const clave    = process.env.ERP_CLAVE    ?? "";
+
+  const consulta = `<Consulta>
+<NombreConexion>${conexion}</NombreConexion>
+<IdCia>${cia}</IdCia>
+<IdProveedor>FENIX</IdProveedor>
+<IdConsulta>WS_FENIX_INVENTARIO_REF_LOTE</IdConsulta>
+<Usuario>${usuario}</Usuario>
+<Clave>${clave}</Clave>
+<Parametros>
+<p_id_cia>${cia}</p_id_cia>
+<p_id_bodega>${bodegaId}</p_id_bodega>
+<p_Referencia>${referencia}</p_Referencia>
+</Parametros>
+</Consulta>`;
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tem="http://tempuri.org/">
+<soapenv:Header/>
+<soapenv:Body>
+<tem:EjecutarConsultaXML>
+<tem:pvstrxmlParametros><![CDATA[${consulta}]]></tem:pvstrxmlParametros>
+</tem:EjecutarConsultaXML>
+</soapenv:Body>
+</soapenv:Envelope>`;
+}
+
+// ── Parser de respuesta de WS_FENIX_INVENTARIO_REF_LOTE ──────────────────
+function parseInventarioRefLoteRespuesta(xml: string): InventarioRefLoteItem[] {
+  const dsStart = xml.indexOf("<NewDataSet");
+  const dsEnd   = xml.indexOf("</NewDataSet>");
+  if (dsStart === -1 || dsEnd === -1) return [];
+
+  const dataset = xml.slice(dsStart, dsEnd + "</NewDataSet>".length);
+  const chunks  = dataset.split(/<Resultado\b[^>]*>/);
+
+  const get = (block: string, tag: string): string => {
+    const open  = `<${tag}>`;
+    const close = `</${tag}>`;
+    const i = block.indexOf(open);
+    if (i === -1) return "";
+    return block.slice(i + open.length, block.indexOf(close, i)).trim();
+  };
+
+  const items: InventarioRefLoteItem[] = [];
+  for (let k = 1; k < chunks.length; k++) {
+    const content = chunks[k].split("</Resultado>")[0];
+    items.push({
+      lote:          get(content, "Lote"),
+      fechaCreacion: get(content, "Fecha_creacion"),
+      unidInv1:      get(content, "Unid_Inv1"),
+      unidInv2:      get(content, "Unid_Inv2"),
+      disponible1:   parseFloat(get(content, "Cantidad_disponible1")) || 0,
+      disponible2:   parseFloat(get(content, "Cantidad_disponible2")) || 0,
+    });
+  }
+  return items;
+}
+
+// ── Consulta de inventario por bodega + referencia + lote ────────────────
+// Devuelve los lotes ya ordenados de más antiguo a más reciente (FIFO).
+export async function queryInventarioRefLote(
+  bodegaId:   string,
+  referencia: string,
+): Promise<InventarioRefLoteItem[]> {
+  const url = process.env.ERP_SOAP_URL ?? "";
+  if (!url) throw new Error("ERP_SOAP_URL no está configurada en .env");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60_000);
+
+  try {
+    const res = await fetch(url, {
+      method:  "POST",
+      headers: {
+        "Content-Type": "text/xml;charset=utf-8",
+        SOAPAction: `"http://tempuri.org/EjecutarConsultaXML"`,
+      },
+      body:   buildInventarioRefLoteEnvelope(bodegaId, referencia),
+      signal: controller.signal,
+    });
+
+    const text = await res.text();
+    if (!text) throw new Error("Sin respuesta al consultar inventario por lote");
+    const items = parseInventarioRefLoteRespuesta(text);
+    // Ordenar FIFO: fecha_creacion ascendente (lote más antiguo primero)
+    items.sort((a, b) => a.fechaCreacion.localeCompare(b.fechaCreacion));
+    return items;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Tiempo de espera agotado al consultar inventario por lote");
+    }
+    if (
+      err instanceof TypeError &&
+      err.message === "fetch failed" &&
+      "cause" in err &&
+      err.cause instanceof Error
+    ) {
+      throw new Error(`Error de red al consultar inventario por lote [${(err as TypeError & { cause: Error }).cause.message}]`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Construcción del envelope SOAP ────────────────────────────────────────
 export function buildEnvelope(lineasTexto: string): string {
   const conexion = process.env.ERP_CONEXION ?? "";
