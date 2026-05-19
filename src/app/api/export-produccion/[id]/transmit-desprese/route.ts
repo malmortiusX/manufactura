@@ -944,12 +944,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 const lotesByRef = new Map<string, LoteDisp[]>();
                 for (const ref of needByRef.keys()) {
                   const lotes = await queryInventarioRefLote(bodegaConsulta, ref);
-                  lotesByRef.set(ref, lotes.map((l) => ({
-                    lote:        l.lote,
-                    unidInv1:    l.unidInv1,
-                    disponible1: l.disponible1,
-                    disponible2: l.disponible2,
-                  })));
+                  // Ignorar lotes con Cantidad_disponible2 = 0: no tienen unidades
+                  // que consumir, aunque tengan kilos disponibles.
+                  lotesByRef.set(ref, lotes
+                    .filter((l) => l.disponible2 > 0)
+                    .map((l) => ({
+                      lote:        l.lote,
+                      unidInv1:    l.unidInv1,
+                      disponible1: l.disponible1,
+                      disponible2: l.disponible2,
+                    })));
                 }
 
                 // ── C: verificar existencias — total disponible >= total a consumir ─
@@ -1001,17 +1005,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                   const fifoRows: RowXml3[] = [];
 
                   for (const [ref, need] of needByRef.entries()) {
-                    const lotes  = lotesByRef.get(ref) ?? [];
-                    let rem1     = need.total1;
-                    const total1 = need.total1;
+                    const lotes = lotesByRef.get(ref) ?? [];
+                    let rem1    = need.total1;
+                    let rem2    = need.total2;
 
                     for (const lote of lotes) {
                       if (rem1 <= 0.00001) break;
                       if (lote.disponible1 <= 0.00001) continue;
+                      // Consumir lote completo o lo que falte, igual para KIL y UND.
                       const take1 = Math.min(lote.disponible1, rem1);
-                      const take2 = total1 > 0 && need.total2 > 0
-                        ? Math.round((need.total2 * (take1 / total1)) * 10000) / 10000
-                        : 0;
+                      const take2 = Math.min(lote.disponible2, rem2);
                       fifoRows.push({
                         CODIGO_PRODUCTO: ref,
                         LOTE_PRODUCTO:   lote.lote,
@@ -1021,6 +1024,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                         UND:             take2,
                       });
                       rem1 -= take1;
+                      rem2 -= take2;
                     }
                   }
 
