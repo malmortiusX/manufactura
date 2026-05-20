@@ -928,6 +928,7 @@ export default function DesPreseDetailPage() {
           xml2:  log1.xml2  ?? "",
           xml3:  log1.xml3  ?? "",
         },
+        existenciaCheck: data.existenciaCheck ?? undefined,
       });
 
       // Vista previa XML1

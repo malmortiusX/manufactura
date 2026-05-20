@@ -3,10 +3,11 @@
 // GET ?bache=X
 // Devuelve: filtro, bache, logId1, consecOpg1, logId2?, consecOpg2?, log1, log2?, rows, rowsOpg1, rowsConsumo
 
-import { NextResponse } from "next/server";
-import { auth }         from "@/lib/auth";
-import { prisma }       from "@/lib/prisma";
-import { headers }      from "next/headers";
+import { NextResponse }        from "next/server";
+import { auth }                from "@/lib/auth";
+import { prisma }              from "@/lib/prisma";
+import { headers }             from "next/headers";
+import { queryExistenciaLote } from "@/lib/erp-soap";
 
 function s(val: string | null | undefined): string {
   return (val ?? "").replace(/'/g, "''").trim();
@@ -186,6 +187,74 @@ export async function GET(
       }
     }
 
+    // ── Verificación de existencias OPG1 (solo si el consumo aún no fue enviado) ──
+    // Se re-consulta al ERP en tiempo real para que el usuario vea el estado actual
+    // del stock al cargar desde historial, igual que después de un primer intento.
+    type ExistenciaComparacion = {
+      bodegaId: string; referencia: string; lote: string;
+      disponible1: number; disponible2: number; aConsumir1: number; suficiente: boolean;
+    };
+    let existenciaCheck: { items: ExistenciaComparacion[]; suficiente: boolean } | null = null;
+
+    if (log1.estadoConsumoProduccion !== "ENVIADO") {
+      try {
+        const co          = filtro.centroOperacion?.trim() ?? "";
+        const consecOpg1n = log1.numeroOpg;
+        const existencias = await queryExistenciaLote(co, "OPG", consecOpg1n);
+
+        type NeedEntry = { bodegaId: string; referencia: string; pendiente1: number; pendiente2: number };
+        const needMap = new Map<string, NeedEntry>();
+        for (const e of existencias) {
+          const bId = e.bodegaId.trim();
+          const ref = e.referencia.trim();
+          const key = `${bId}\x00${ref}`;
+          const prev = needMap.get(key);
+          if (!prev) needMap.set(key, { bodegaId: bId, referencia: ref, pendiente1: e.pendiente1, pendiente2: e.pendiente2 });
+          else { prev.pendiente1 += e.pendiente1; prev.pendiente2 += e.pendiente2; }
+        }
+
+        type StockEntry = { bodegaId: string; referencia: string; lote: string; disponible1: number; disponible2: number };
+        const stockMap = new Map<string, StockEntry>();
+        for (const e of existencias) {
+          const bId  = e.bodegaId.trim();
+          const ref  = e.referencia.trim();
+          const lote = e.lote.trim();
+          const key  = `${bId}\x00${ref}\x00${lote}`;
+          const prev = stockMap.get(key);
+          if (!prev || e.disponible1 > prev.disponible1)
+            stockMap.set(key, { bodegaId: bId, referencia: ref, lote, disponible1: e.disponible1, disponible2: e.disponible2 });
+        }
+
+        const availMap = new Map<string, number>();
+        for (const pos of stockMap.values()) {
+          const key = `${pos.bodegaId}\x00${pos.referencia}`;
+          availMap.set(key, (availMap.get(key) ?? 0) + pos.disponible1);
+        }
+
+        const r4 = (n: number) => Math.round(n * 10000) / 10000;
+        const items: ExistenciaComparacion[] = [];
+        for (const pos of stockMap.values()) {
+          const needKey    = `${pos.bodegaId}\x00${pos.referencia}`;
+          const aConsumir1 = needMap.get(needKey)?.pendiente1 ?? 0;
+          const totalDisp  = availMap.get(needKey) ?? 0;
+          items.push({ bodegaId: pos.bodegaId, referencia: pos.referencia, lote: pos.lote,
+            disponible1: pos.disponible1, disponible2: pos.disponible2, aConsumir1,
+            suficiente: r4(totalDisp) >= r4(aConsumir1) });
+        }
+        for (const [key, need] of needMap.entries()) {
+          const hasStock = [...stockMap.keys()].some((k) => k.startsWith(key + "\x00"));
+          if (!hasStock && need.pendiente1 > 0)
+            items.push({ bodegaId: need.bodegaId, referencia: need.referencia, lote: "",
+              disponible1: 0, disponible2: 0, aConsumir1: need.pendiente1, suficiente: false });
+        }
+
+        const todoSuficiente = items.every((i) => i.suficiente);
+        existenciaCheck = todoSuficiente ? null : { items, suficiente: false };
+      } catch {
+        // Si el WS falla no bloqueamos la carga del resume
+      }
+    }
+
     return NextResponse.json({
       filtro,
       bache,
@@ -216,6 +285,7 @@ export async function GET(
       rows,
       rowsOpg1,
       rowsConsumo,
+      existenciaCheck,
     });
 
   } catch (err) {
