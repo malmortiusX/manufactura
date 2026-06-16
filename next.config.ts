@@ -2,8 +2,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Habilita React strict mode para detectar problemas en desarrollo
   reactStrictMode: true,
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? "",
 };
 
 export default nextConfig;
