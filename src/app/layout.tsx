@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_APP_NAME ?? "Mi Dashboard",
   description: "Dashboard empresarial",
   icons: {
-    icon: "/icon.png",
-    apple: "/icon.png",
+    icon: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon.png`,
+    apple: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon.png`,
   },
 };
 

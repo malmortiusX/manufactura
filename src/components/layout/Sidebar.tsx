@@ -72,7 +72,7 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
-        <img src="/icon.png" alt="Logo" className="w-10 h-10 flex-shrink-0" />
+        <img src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon.png`} alt="Logo" className="w-10 h-10 flex-shrink-0" />
         <div>
           <p className="text-slate-800 font-semibold text-sm leading-none">
             {process.env.NEXT_PUBLIC_APP_NAME ?? "Mi Dashboard"}
