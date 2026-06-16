@@ -15,12 +15,15 @@ export async function middleware(request: NextRequest) {
 
   // Si está autenticado y va a una ruta pública, redirigir al dashboard
   if (isAuthenticated && isPublicRoute) {
-    return NextResponse.redirect(new URL(DEFAULT_REDIRECT, request.url));
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = DEFAULT_REDIRECT;
+    return NextResponse.redirect(redirectUrl);
   }
 
   // Si NO está autenticado y va a una ruta protegida, redirigir al login
   if (!isAuthenticated && !isPublicRoute && pathname !== "/") {
-    const loginUrl = new URL(LOGIN_ROUTE, request.url);
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = LOGIN_ROUTE;
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
