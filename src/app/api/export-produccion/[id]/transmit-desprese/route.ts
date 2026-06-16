@@ -165,6 +165,7 @@ function buildXML2(
   productoProceso: string[],
   motivoConsumo:   string,
   ccostoMovto:     string,
+  unNegocio:       string,
 ): string {
   const y      = parseInt(fecha.slice(0, 4), 10);
   const m      = parseInt(fecha.slice(4, 6), 10);
@@ -214,7 +215,7 @@ function buildXML2(
       pN(701,    3) +
       pA(motivoConsumo,         2) +
       pA(centroOperacion,       3) +
-      pA("31",  20) +
+      pA(unNegocio,            20) +
       pA(ccostoMovto,          15) +
       pA("",                   15) +
       pA(comp.hijoUnidad,       4) +
@@ -252,6 +253,7 @@ function buildXML2ConLotes(
   lineas:          Xml2Line[],
   motivoConsumo:   string,
   ccostoMovto:     string,
+  unNegocio:       string,
 ): string {
   const opening = "000000100000001001";
 
@@ -288,7 +290,7 @@ function buildXML2ConLotes(
     pN(701,    3) +
     pA(motivoConsumo,         2) +
     pA(centroOperacion,       3) +
-    pA("31",  20) +
+    pA(unNegocio,            20) +
     pA(ccostoMovto,          15) +
     pA("",          15) +
     pA(ln.hijoUnidad,         4) +
@@ -317,6 +319,7 @@ function buildXML2Consumo(
   productoProceso:  string,
   motivoConsumo:    string,
   ccostoMovto:      string,
+  unNegocio:        string,
 ): string {
   const opening = "000000100000001001";
 
@@ -353,7 +356,7 @@ function buildXML2Consumo(
     pN(701,    3) +
     pA(motivoConsumo,        2) +
     pA(centroOperacion,      3) +
-    pA("31",  20) +
+    pA(unNegocio,           20) +
     pA(ccostoMovto,         15) +
     pA("",          15) +
     pA((row.UNIDAD_PRODUCTO.trim() === "KG") ? "KIL" : row.UNIDAD_PRODUCTO.trim(), 4) +
@@ -396,6 +399,7 @@ function buildXML3(
   bodegaItemPadre: string | null | undefined,
   motivoEntrega:   string,
   ccostoMovto:     string,
+  unNegocio:       string,
 ): string {
   const opening = "000000100000001001";
 
@@ -441,9 +445,9 @@ function buildXML3(
       pA(row.LOTE_PRODUCTO,    15) +
       pN(701,    3) +
       pA(motivoEntrega, 2) +
-      pA("",   2) + 
+      pA("",   2) +
       pA(centroOperacion,       3) +
-      pA("31",  20) +
+      pA(unNegocio,            20) +
       pA(ccostoMovto,          15) +
       pA("",          15) +
       pQ(Number(row.KIL), 15, 4) +
@@ -476,6 +480,7 @@ function buildXML3b(
   productoProceso:  string,
   motivoEntrega:    string,
   ccostoMovto:      string,
+  unNegocio:        string,
 ): string {
   const opening = "000000100000001001";
 
@@ -523,9 +528,9 @@ function buildXML3b(
       pA(row.LOTE_PRODUCTO,    15) +
       pN(701,    3) +
       pA(motivoEntrega, 2) +
-      pA("",   2) + 
+      pA("",   2) +
       pA(centroOperacion,   3) +
-      pA("31",  20) +
+      pA(unNegocio,        20) +
       pA(ccostoMovto,      15) +
       pA("",          15) +
       pQ(Number(row.KIL), 15, 4) +
@@ -670,8 +675,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [], logId1,
             logId2: bodyLogId2, prevConsecOpg2 } = body;
 
-    const ccostoConsumo = filtro.ccostoConsumo?.trim() ?? "";
-    const ccostoEntrega = filtro.ccostoEntrega?.trim() ?? "";
+    const ccostoConsumo    = filtro.ccostoConsumo?.trim()    ?? "";
+    const ccostoEntrega    = filtro.ccostoEntrega?.trim()    ?? "";
+    const unNegocioConsumo = filtro.unNegocioConsumo?.trim() ?? "";
+    const unNegocioEntrega = filtro.unNegocioEntrega?.trim() ?? "";
 
     if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
     if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
@@ -1035,6 +1042,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                     ppCodigo,
                     filtro.motivoConsumo?.trim() ?? "",
                     ccostoConsumo,
+                    unNegocioConsumo,
                   );
                   await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
                   consumoOpg2Result = await callSoap(xml2b);
@@ -1042,7 +1050,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               } else {
                 // Sin registros seleccionados: usar componentes del ERP (fallback)
                 const opg2Componentes = await queryComponentesOP(co, "OPG", consecOpg2);
-                xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
+                xml2b = buildXML2(co, filtro.nombre, fecha, consecOpg2, opg2Componentes.filter((c) => c.cantidadPendiente1 > 0), PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo, unNegocioConsumo);
                 await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
                 consumoOpg2Result = await callSoap(xml2b);
               }
@@ -1090,7 +1098,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               entregaOpg2Result = skip(log2State.respuestaEntregaProduccion);
             } else {
               try {
-                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, ppCodigo, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega);
+                xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, ppCodigo, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega, unNegocioEntrega);
                 await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
                 entregaOpg2Result = await callSoap(xml3b);
               } catch (e) { entregaOpg2Result = mkErr(e); }
@@ -1302,9 +1310,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
             if (existenciasOk) {
               if (lotesParaConsumo && lotesParaConsumo.length > 0) {
-                xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
+                xml2 = buildXML2ConLotes(co, filtro.nombre, fecha, consecOpg1, lotesParaConsumo, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo, unNegocioConsumo);
               } else {
-                xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo);
+                xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo, unNegocioConsumo);
               }
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
               consumoOpg1Result = await callSoap(xml2);
@@ -1318,7 +1326,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             entregaOpg1Result = skip(log1State.respuestaEntregaProduccion);
           } else {
             try {
-              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rows, filtro.bodegaItemPadre, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega);
+              xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rows, filtro.bodegaItemPadre, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega, unNegocioEntrega);
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
               entregaOpg1Result = await callSoap(xml3);
             } catch (e) { entregaOpg1Result = mkErr(e); }

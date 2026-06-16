@@ -41,6 +41,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       motivoEntrega:             body.motivoEntrega             || null,
       ccostoConsumo:             body.ccostoConsumo             || null,
       ccostoEntrega:             body.ccostoEntrega             || null,
+      unNegocioConsumo:          body.unNegocioConsumo          || null,
+      unNegocioEntrega:          body.unNegocioEntrega          || null,
     },
   });
 

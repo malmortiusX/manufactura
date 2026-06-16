@@ -102,6 +102,9 @@ model ExportProduccion {
   // Centro de costo para f470_id_ccosto_movto
   ccostoConsumo             String?  @db.VarChar(15)
   ccostoEntrega             String?  @db.VarChar(15)
+  // Unidad de negocio para f470_id_un_movto
+  unNegocioConsumo          String?  @db.Char(20)
+  unNegocioEntrega          String?  @db.Char(20)
 
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt

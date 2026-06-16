@@ -33,6 +33,8 @@ export interface FilterSet {
   motivoEntrega: string | null;
   ccostoConsumo: string | null;
   ccostoEntrega: string | null;
+  unNegocioConsumo: string | null;
+  unNegocioEntrega: string | null;
 }
 
 export type ModuloKey =
@@ -130,6 +132,8 @@ const emptyForm = {
   motivoEntrega: "",
   ccostoConsumo: "",
   ccostoEntrega: "",
+  unNegocioConsumo: "",
+  unNegocioEntrega: "",
 };
 
 export default function FilterList({ modulo, basePath, hasDetail = false }: Props) {
@@ -208,6 +212,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
       motivoEntrega:             item.motivoEntrega             ?? "",
       ccostoConsumo:             item.ccostoConsumo             ?? "",
       ccostoEntrega:             item.ccostoEntrega             ?? "",
+      unNegocioConsumo:          item.unNegocioConsumo          ?? "",
+      unNegocioEntrega:          item.unNegocioEntrega          ?? "",
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -528,7 +534,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-green-100">
                 <Field label="Motivo" name="motivoConsumo" value={form.motivoConsumo} onChange={handleChange} maxLength={2} placeholder="Ej: 01" mono />
-                <Field label="CENTRO DE COSTOS" name="ccostoConsumo" value={form.ccostoConsumo} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
+                <Field label="Centro de Costos" name="ccostoConsumo" value={form.ccostoConsumo} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
+                <Field label="Unidad de Negocio" name="unNegocioConsumo" value={form.unNegocioConsumo} onChange={handleChange} maxLength={20} placeholder="Ej: 31" mono />
               </div>
               <div className="my-6 border-t border-slate-100" />
               <div className="mb-4">
@@ -539,7 +546,8 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 pl-4 border-l-2 border-teal-100">
                 <Field label="Motivo" name="motivoEntrega" value={form.motivoEntrega} onChange={handleChange} maxLength={2} placeholder="Ej: 01" mono />
-                <Field label="CENTRO DE COSTOS" name="ccostoEntrega" value={form.ccostoEntrega} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
+                <Field label="Centro de Costos" name="ccostoEntrega" value={form.ccostoEntrega} onChange={handleChange} maxLength={15} placeholder="Ej: CC001" mono />
+                <Field label="Unidad de Negocio" name="unNegocioEntrega" value={form.unNegocioEntrega} onChange={handleChange} maxLength={20} placeholder="Ej: 31" mono />
               </div>
             </>
           )}
