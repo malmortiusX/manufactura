@@ -279,7 +279,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
         </p>
         <button
           onClick={handleNew}
-          className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors"
+          className="flex items-center gap-2 bg-[#f89520] hover:bg-[#e07208] text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -366,7 +366,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                     <td className="px-5 py-4 text-slate-600">{item.bodega || "—"}</td>
                     <td className="px-5 py-4">
                       {item.tipoDocumento
-                        ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{item.tipoDocumento}</span>
+                        ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700">{item.tipoDocumento}</span>
                         : <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-5 py-4">
@@ -379,7 +379,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
                       <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => handleEdit(item)}
-                          className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-500 transition-colors"
+                          className="p-1.5 rounded-lg hover:bg-orange-50 text-slate-400 hover:text-orange-500 transition-colors"
                           title="Editar"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -560,7 +560,7 @@ export default function FilterList({ modulo, basePath, hasDetail = false }: Prop
               type="button"
               onClick={handleSave}
               disabled={saving || !form.identificador.trim() || !form.nombre.trim()}
-              className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors"
+              className="flex items-center gap-2 bg-[#f89520] hover:bg-[#e07208] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors"
             >
               {saving
                 ? <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>

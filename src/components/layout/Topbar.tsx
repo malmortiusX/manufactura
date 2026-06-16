@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 // src/components/layout/Topbar.tsx
 import { useSession } from "@/lib/auth-client";
 
@@ -31,7 +31,7 @@ export default function Topbar({ title }: TopbarProps) {
 
         {/* User avatar */}
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-semibold">
+          <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold">
             {initials}
           </div>
           <div className="hidden sm:block">
@@ -43,3 +43,4 @@ export default function Topbar({ title }: TopbarProps) {
     </header>
   );
 }
+

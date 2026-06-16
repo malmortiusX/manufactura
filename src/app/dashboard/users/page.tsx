@@ -190,7 +190,7 @@ export default function UsersPage() {
         <p className="text-sm text-slate-500">{users.length} usuarios registrados</p>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-[#f89520] hover:bg-[#e07208] rounded-lg transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -226,7 +226,7 @@ export default function UsersPage() {
                   <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-semibold">
+                        <div className="w-8 h-8 rounded-full bg-[#f89520] flex items-center justify-center text-white text-xs font-semibold">
                           {u.name?.split(" ").map((n) => n[0]).join("").slice(0, 2) ?? "U"}
                         </div>
                         <div>
@@ -255,7 +255,7 @@ export default function UsersPage() {
                         <button
                           onClick={() => openEdit(u)}
                           title="Editar usuario"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-[#3ab54a] hover:bg-[#289337] rounded-lg transition-colors"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
@@ -265,7 +265,7 @@ export default function UsersPage() {
                         <button
                           onClick={() => openPwd(u)}
                           title="Cambiar contraseña"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-[#3ab54a] hover:bg-[#289337] rounded-lg transition-colors"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
@@ -325,7 +325,7 @@ export default function UsersPage() {
                   value={userModal.name}
                   onChange={(e) => setUserModal((s) => ({ ...s, name: e.target.value }))}
                   placeholder="Ej: Juan Pérez"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
                 />
               </div>
@@ -337,7 +337,7 @@ export default function UsersPage() {
                   value={userModal.email}
                   onChange={(e) => setUserModal((s) => ({ ...s, email: e.target.value }))}
                   placeholder="correo@empresa.com"
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
                 />
               </div>
@@ -350,7 +350,7 @@ export default function UsersPage() {
                     value={userModal.password}
                     onChange={(e) => setUserModal((s) => ({ ...s, password: e.target.value }))}
                     placeholder="Mínimo 8 caracteres"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   />
                 </div>
@@ -361,7 +361,7 @@ export default function UsersPage() {
                 <select
                   value={userModal.role}
                   onChange={(e) => setUserModal((s) => ({ ...s, role: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
                 >
                   <option value="user">Usuario</option>
                   <option value="admin">Administrador</option>
@@ -383,7 +383,7 @@ export default function UsersPage() {
                 <button
                   type="submit"
                   disabled={userModalLoading}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-60 rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#f89520] hover:bg-[#e07208] disabled:opacity-60 rounded-lg transition-colors"
                 >
                   {userModalLoading ? "Guardando..." : userModal.mode === "create" ? "Crear" : "Guardar"}
                 </button>
@@ -420,7 +420,7 @@ export default function UsersPage() {
                     value={pwd}
                     onChange={(e) => setPwd(e.target.value)}
                     placeholder="Mínimo 8 caracteres"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   />
                 </div>
@@ -431,7 +431,7 @@ export default function UsersPage() {
                     value={pwdConfirm}
                     onChange={(e) => setPwdConfirm(e.target.value)}
                     placeholder="Repetir contraseña"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   />
                 </div>
@@ -449,7 +449,7 @@ export default function UsersPage() {
                   <button
                     type="submit"
                     disabled={pwdLoading}
-                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-60 rounded-lg transition-colors"
+                    className="flex-1 px-4 py-2 text-sm font-medium text-white bg-[#f89520] hover:bg-[#e07208] disabled:opacity-60 rounded-lg transition-colors"
                   >
                     {pwdLoading ? "Guardando..." : "Guardar"}
                   </button>
