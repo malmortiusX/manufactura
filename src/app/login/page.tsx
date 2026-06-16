@@ -37,7 +37,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-8">
-          <img src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon.png`} alt="Logo" className="w-20 h-20 mx-auto mb-4" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon.png" alt="Logo" className="w-20 h-20 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-slate-800">Bienvenido</h1>
           <p className="text-[#3ab54a] text-sm mt-1 font-medium">Inicia sesión para continuar</p>
         </div>
