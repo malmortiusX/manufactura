@@ -1,43 +1,15 @@
-"use client";
 // src/app/dashboard/layout.tsx
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
-import { usePathname } from "next/navigation";
-
-const pageTitles: Record<string, string> = {
-  "/dashboard":                                          "Dashboard",
-  "/dashboard/employees":                                "Empleados",
-  "/dashboard/users":                                    "Usuarios",
-  "/dashboard/reports":                                  "Reportes",
-  "/dashboard/settings":                                 "Configuración",
-  "/dashboard/export-produccion/entrada-desprese":       "Entrada Desprese",
-  "/dashboard/export-produccion/salida-desprese":        "Salida Desprese",
-  "/dashboard/export-produccion/entrada-beneficio":      "Entrada Beneficio",
-  "/dashboard/export-produccion/salida-beneficio":       "Salida Beneficio",
-  "/dashboard/export-produccion/beneficio":              "Beneficio",
-  "/dashboard/export-produccion/produccion-cpp":          "Con Prod. en Proceso",
-  "/dashboard/export-produccion/produccion-spp":         "Sin Prod. en Proceso",
-  "/dashboard/export-produccion/historial-baches":       "Historial de baches",
-};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const title =
-    pageTitles[pathname] ??
-    (pathname.startsWith("/dashboard/export-produccion/salida-desprese/")  ? "Salida Desprese"   :
-     pathname.startsWith("/dashboard/export-produccion/entrada-desprese/")  ? "Entrada Desprese"  :
-     pathname.startsWith("/dashboard/export-produccion/salida-beneficio/")  ? "Salida Beneficio"  :
-     pathname.startsWith("/dashboard/export-produccion/entrada-beneficio/") ? "Entrada Beneficio" :
-     pathname.startsWith("/dashboard/export-produccion/beneficio/")         ? "Beneficio"         :
-     pathname.startsWith("/dashboard/export-produccion/produccion-cpp/")     ? "Con Prod. en Proceso" :
-     pathname.startsWith("/dashboard/export-produccion/produccion-spp/")   ? "Sin Prod. en Proceso" :
-     "Dashboard");
+  const iconSrc = (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + "/icon.png";
 
   return (
     <div className="flex h-screen bg-slate-100 overflow-hidden">
-      <Sidebar />
+      <Sidebar iconSrc={iconSrc} />
       <div className="flex-1 flex flex-col ml-64 overflow-hidden">
-        <Topbar title={title} />
+        <Topbar />
         <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>

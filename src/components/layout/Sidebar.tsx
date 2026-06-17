@@ -1,7 +1,6 @@
 "use client";
 // src/components/layout/Sidebar.tsx
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
@@ -47,7 +46,7 @@ const exportGroups = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ iconSrc }: { iconSrc: string }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -73,7 +72,8 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-slate-200 flex flex-col z-50">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100">
-        <Image src="/icon.png" alt="Logo" width={40} height={40} unoptimized className="flex-shrink-0" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={iconSrc} alt="Logo" className="w-10 h-10 flex-shrink-0" />
         <div>
           <p className="text-slate-800 font-semibold text-sm leading-none">
             {process.env.NEXT_PUBLIC_APP_NAME ?? "Mi Dashboard"}
