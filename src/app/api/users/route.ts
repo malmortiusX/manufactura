@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@/lib/password";
 
 async function requireAdmin() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "El email ya está registrado" }, { status: 409 });
   }
 
-  const hashed = await bcrypt.hash(password, 10);
+  const hashed = await hashPassword(password);
 
   const user = await prisma.user.create({
     data: {
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   await prisma.account.create({
     data: {
-      accountId: email.trim(),
+      accountId: user.id,
       providerId: "credential",
       userId: user.id,
       password: hashed,

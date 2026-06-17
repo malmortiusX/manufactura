@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@/lib/password";
 
 export async function PUT(
   request: Request,
@@ -28,7 +28,7 @@ export async function PUT(
     );
   }
 
-  const hashed = await bcrypt.hash(password, 10);
+  const hashed = await hashPassword(password);
 
   const updated = await prisma.account.updateMany({
     where: { userId: id, providerId: "credential" },

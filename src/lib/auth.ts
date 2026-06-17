@@ -10,7 +10,7 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false, // Cambiar a true en producción con SMTP configurado
+    requireEmailVerification: false,
   },
 
   session: {
