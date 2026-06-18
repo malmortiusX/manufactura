@@ -7,10 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 
 export async function POST() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     const rec = await prisma.consecutivo.upsert({
       where:  { tipoDocumento: "OPG" },
       create: { tipoDocumento: "OPG", consecutivo: 1 },

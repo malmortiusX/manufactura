@@ -67,19 +67,18 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
-  const { id }   = await params;
-  const filtroId = Number(id);
-
-  const url        = new URL(req.url);
-  const bacheParam = url.searchParams.get("bache");
-  if (!bacheParam) return NextResponse.json({ error: "Falta el parámetro bache" }, { status: 400 });
-  const bache = Number(bacheParam);
-  if (!bache || isNaN(bache)) return NextResponse.json({ error: "Bache inválido" }, { status: 400 });
-
   try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+    const { id }   = await params;
+    const filtroId = Number(id);
+
+    const url        = new URL(req.url);
+    const bacheParam = url.searchParams.get("bache");
+    if (!bacheParam) return NextResponse.json({ error: "Falta el parámetro bache" }, { status: 400 });
+    const bache = Number(bacheParam);
+    if (!bache || isNaN(bache)) return NextResponse.json({ error: "Bache inválido" }, { status: 400 });
     const filtro = await prisma.exportProduccion.findUnique({ where: { id: filtroId } });
     if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
 

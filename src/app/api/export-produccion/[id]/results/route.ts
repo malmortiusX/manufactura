@@ -75,8 +75,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id } = await params;
-
-  const filtro = await prisma.exportProduccion.findUnique({ where: { id: Number(id) } });
+  let filtro;
+  try {
+    filtro = await prisma.exportProduccion.findUnique({ where: { id: Number(id) } });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
   if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
 
   const fecha = parseFecha(filtro.fecha);
