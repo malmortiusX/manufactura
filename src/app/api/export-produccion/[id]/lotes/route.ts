@@ -142,33 +142,39 @@ export async function POST(req: Request) {
       });
     }
 
-    // ── 3. Enviar un XML individual por lote al ERP ───────────────────────
-    // Enviar todos juntos hace que si uno ya existe en ERP el batch entero
-    // falle. Enviando de a uno, un "ya existe" solo afecta ese lote.
+    // ── 3. Enviar un XML individual por lote al ERP (en paralelo) ───────────
+    // Enviando de a uno por lote: si uno ya existe en ERP el batch completo
+    // no falla. Ejecutamos todos en paralelo para no acumular timeouts.
     const LOTE_YA_EXISTE = "el lote que desea adicionar ya existe";
     const xmlsEnviados: string[] = [];
     const creados:      ProductoLote[] = [];
     const erroresReales: ErpError[]   = [];
 
-    for (const lote of nuevos) {
-      const xml    = buildXMLLotes([lote], fecha);
+    const resultados = await Promise.allSettled(
+      nuevos.map(async (lote) => {
+        const xml = buildXMLLotes([lote], fecha);
+        const result = await callSoap(xml);
+        return { lote, xml, result };
+      })
+    );
+
+    for (const settled of resultados) {
+      if (settled.status === "rejected") continue;
+      const { lote, xml, result } = settled.value;
       xmlsEnviados.push(xml);
-      try {
-        const result  = await callSoap(xml);
-        const yaExiste = result.errores.some((e) =>
-          e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
-        );
-        if (result.exitoso || yaExiste) {
-          await prisma.loteCreado.upsert({
-            where:  { codigoProducto_lote: { codigoProducto: lote.codigo, lote: lote.lote } },
-            create: { codigoProducto: lote.codigo, lote: lote.lote },
-            update: {},
-          });
-          creados.push(lote);
-        } else {
-          erroresReales.push(...result.errores);
-        }
-      } catch { /* continuar con el siguiente lote */ }
+      const yaExiste = result.errores.some((e) =>
+        e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
+      );
+      if (result.exitoso || yaExiste) {
+        await prisma.loteCreado.upsert({
+          where:  { codigoProducto_lote: { codigoProducto: lote.codigo, lote: lote.lote } },
+          create: { codigoProducto: lote.codigo, lote: lote.lote },
+          update: {},
+        });
+        creados.push(lote);
+      } else {
+        erroresReales.push(...result.errores);
+      }
     }
 
     const xmlLotes = xmlsEnviados.join("\n\n");

@@ -1004,7 +1004,8 @@ export default function DesPreseDetailPage() {
       ]).values());
 
       let xmlLotesEnviado = "// Sin lotes — no se enviará XML de lotes";
-      if (uniqueLotes.length > 0) {
+      // En modo resume los lotes ya fueron enviados en la transmisión original
+      if (!isResumeMode && uniqueLotes.length > 0) {
         const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -1015,8 +1016,6 @@ export default function DesPreseDetailPage() {
         const lotesData: LoteCreacionResult = JSON.parse(lotesText);
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
         setLotesResult(lotesData);
-        // Usar el XML exacto que el servidor construyó y envió al ERP.
-        // xmlLotes es null cuando todos los lotes ya existían en LoteCreado.
         xmlLotesEnviado = lotesData.xmlLotes ?? "// Todos los lotes ya existían — no se envió XML";
       }
 
@@ -1095,7 +1094,7 @@ export default function DesPreseDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1, transmitResult]);
+  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1, transmitResult, isResumeMode]);
 
   const tr = transmitResult;
 

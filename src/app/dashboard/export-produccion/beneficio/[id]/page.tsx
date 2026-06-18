@@ -923,7 +923,8 @@ export default function BeneficioDetailPage() {
       );
 
       let xmlLotesEnviado = "// Todos los lotes ya existían — no se envió XML";
-      if (uniqueLotes.length > 0) {
+      // En modo resume los lotes ya fueron enviados en la transmisión original
+      if (!isResumeMode && uniqueLotes.length > 0) {
         const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -935,8 +936,6 @@ export default function BeneficioDetailPage() {
         if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
         xmlLotesEnviado = lotesData.xmlLotes ?? xmlLotesEnviado;
         setLotesResult(lotesData);
-        // En Beneficio no se detiene el proceso si los lotes fallan:
-        // pueden ya existir en el ERP aunque no estén en nuestra DB.
       }
 
       // ── Paso 2: Usar consecOpg1 obtenido al marcar el bache ─────────────
@@ -1002,7 +1001,7 @@ export default function BeneficioDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsOpg1, consecOpg1, logId1, transmitResult]);
+  }, [id, bache, filtro, rows, rowsOpg1, consecOpg1, logId1, transmitResult, isResumeMode]);
 
   const tr = transmitResult;
 
