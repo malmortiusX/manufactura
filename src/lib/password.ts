@@ -1,4 +1,4 @@
-import { randomBytes, scrypt } from "node:crypto";
+import { randomBytes, scrypt } from "crypto";
 
 const SCRYPT_PARAMS = { N: 16384, r: 16, p: 1, dkLen: 64 } as const;
 

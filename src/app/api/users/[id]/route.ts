@@ -37,12 +37,6 @@ export async function PUT(
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   });
 
-  // Sincronizar accountId si cambió el email
-  await prisma.account.updateMany({
-    where: { userId: id, providerId: "credential" },
-    data: { accountId: email.trim() },
-  });
-
   return NextResponse.json(updated);
 }
 
