@@ -581,14 +581,14 @@ ${lineas}
 // ── Llamada SOAP → DocResult ───────────────────────────────────────────────
 // SOAP devuelve HTTP 500 para faults pero el cuerpo sigue siendo XML válido.
 // Siempre se lee el texto; parseSoapRespuesta determina éxito/error.
-// Se usa AbortController para cortar la espera a los 60 s y exponer la causa
+// Se usa AbortController para cortar la espera y exponer la causa
 // real del error de red (ECONNREFUSED, ETIMEDOUT, etc.).
 export async function callSoap(lineasTexto: string): Promise<DocResult> {
   const url = process.env.ERP_SOAP_URL ?? "";
   if (!url) throw new Error("ERP_SOAP_URL no está configurada en .env");
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000); // 60 s
+  const timer = setTimeout(() => controller.abort(), 20_000); // 20 s
 
   try {
     const res = await fetch(url, {
@@ -607,7 +607,7 @@ export async function callSoap(lineasTexto: string): Promise<DocResult> {
   } catch (err) {
     // AbortController disparado: tiempo de espera agotado
     if (err instanceof Error && err.name === "AbortError") {
-      throw new Error(`Tiempo de espera agotado al conectar con el ERP (60 s). URL: ${url}`);
+      throw new Error(`Tiempo de espera agotado al conectar con el ERP (20 s). URL: ${url}`);
     }
     // fetch failed: exponer la causa subyacente (ECONNREFUSED, ENOTFOUND, etc.)
     if (
