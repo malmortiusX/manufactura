@@ -142,25 +142,37 @@ export async function POST(req: Request) {
       });
     }
 
-    // ── 3. Enviar un XML individual por lote al ERP (en paralelo) ───────────
-    // Enviando de a uno por lote: si uno ya existe en ERP el batch completo
-    // no falla. Ejecutamos todos en paralelo para no acumular timeouts.
+    // ── 3. Enviar un XML individual por lote al ERP (concurrencia limitada) ──
+    // Un XML por lote para que un "ya existe" no cancele el batch completo.
+    // Limitamos a 10 simultáneos para no saturar el ERP con 40 conexiones.
     const LOTE_YA_EXISTE = "el lote que desea adicionar ya existe";
+    const CONCURRENCY    = 10;
     const xmlsEnviados: string[] = [];
     const creados:      ProductoLote[] = [];
     const erroresReales: ErpError[]   = [];
 
-    const resultados = await Promise.allSettled(
-      nuevos.map(async (lote) => {
-        const xml = buildXMLLotes([lote], fecha);
-        const result = await callSoap(xml);
-        return { lote, xml, result };
-      })
-    );
+    type LoteResult = { lote: ProductoLote; xml: string; result: Awaited<ReturnType<typeof callSoap>> };
+    const tasks = nuevos.map((lote) => async (): Promise<LoteResult> => {
+      const xml    = buildXMLLotes([lote], fecha);
+      const result = await callSoap(xml);
+      return { lote, xml, result };
+    });
 
-    for (const settled of resultados) {
-      if (settled.status === "rejected") continue;
-      const { lote, xml, result } = settled.value;
+    // Ejecuta `tasks` con un máximo de CONCURRENCY promesas activas a la vez
+    const settled: PromiseSettledResult<LoteResult>[] = new Array(tasks.length);
+    let idx = 0;
+    async function worker() {
+      while (idx < tasks.length) {
+        const i = idx++;
+        try   { settled[i] = { status: "fulfilled", value: await tasks[i]() }; }
+        catch (e) { settled[i] = { status: "rejected", reason: e }; }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker));
+
+    for (const s of settled) {
+      if (s.status === "rejected") continue;
+      const { lote, xml, result } = s.value;
       xmlsEnviados.push(xml);
       const yaExiste = result.errores.some((e) =>
         e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
