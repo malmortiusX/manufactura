@@ -7,6 +7,7 @@
 //   EPG OPG1: entrega de los productos filtrados
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { leerLotesStream } from "@/lib/lotes-stream";
 
 interface ProductRow {
   UNIDAD_PRODUCTO: string;
@@ -779,6 +780,7 @@ export default function DesPreseDetailPage() {
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
+  const [lotesProgreso, setLotesProgreso]   = useState<{ completado: number; total: number } | null>(null);
   const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
   const [logId1, setLogId1]                 = useState<number | null>(null);
   const [isResumeMode, setIsResumeMode]     = useState(false);
@@ -800,6 +802,7 @@ export default function DesPreseDetailPage() {
     setTransmitResult(null);
     setTransmitError(null);
     setLotesResult(null);
+    setLotesProgreso(null);
     setXmlsPreview(null);
     setLogId1(null);
     setConsecOpg1(0);
@@ -867,6 +870,7 @@ export default function DesPreseDetailPage() {
     setTransmitResult(null);
     setTransmitError(null);
     setLotesResult(null);
+    setLotesProgreso(null);
     setXmlsPreview(null);
     setLogId1(null);
     setConsecOpg1(0);
@@ -970,6 +974,7 @@ export default function DesPreseDetailPage() {
       setTransmitting(true);
       setTransmitResult(null);
       setLotesResult(null);
+      setLotesProgreso(null);
     }
     setTransmitError(null);
 
@@ -1006,15 +1011,24 @@ export default function DesPreseDetailPage() {
       let xmlLotesEnviado = "// Sin lotes — no se enviará XML de lotes";
       // En modo resume los lotes ya fueron enviados en la transmisión original
       if (!isResumeMode && uniqueLotes.length > 0) {
-        const lotesRes  = await fetch(`/api/export-produccion/${id}/lotes`, {
+        const lotesRes = await fetch(`/api/export-produccion/${id}/lotes`, {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ productos: uniqueLotes, fecha: fechaYMD(filtro.fecha) }),
         });
-        const lotesText = await lotesRes.text();
-        if (!lotesText) throw new Error("Sin respuesta al crear lotes");
-        const lotesData: LoteCreacionResult = JSON.parse(lotesText);
-        if (!lotesRes.ok) throw new Error(lotesData.error ?? "Error al crear lotes");
+        if (!lotesRes.ok && !lotesRes.headers.get("content-type")?.includes("ndjson")) {
+          throw new Error(`Error al crear lotes (HTTP ${lotesRes.status})`);
+        }
+        const lotesData = await new Promise<LoteCreacionResult>((resolve, reject) => {
+          leerLotesStream(lotesRes, {
+            onStart:    (total) => setLotesProgreso({ completado: 0, total }),
+            onProgress: (completado, total) => setLotesProgreso({ completado, total }),
+            onDone:     (result) => resolve(result),
+            onError:    (msg) => reject(new Error(msg)),
+          });
+        });
+        if (lotesData.error) throw new Error(lotesData.error);
+        setLotesProgreso(null);
         setLotesResult(lotesData);
         xmlLotesEnviado = lotesData.xmlLotes ?? "// Todos los lotes ya existían — no se envió XML";
       }
@@ -1224,6 +1238,24 @@ export default function DesPreseDetailPage() {
       {/* Vista previa XML1 — disponible antes de transmitir */}
       {xmlsPreview && !tr && (
         <XmlsPreview xmlLotes={xmlsPreview.xmlLotes} xml1={xmlsPreview.xml1} />
+      )}
+
+      {/* Progreso de creación de lotes */}
+      {lotesProgreso && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+          <p className="text-sm font-semibold text-slate-700">Paso 1 — Registrando lotes en ERP…</p>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-2 rounded-full bg-[#f89520] transition-all duration-300"
+                style={{ width: `${lotesProgreso.total > 0 ? Math.round((lotesProgreso.completado / lotesProgreso.total) * 100) : 0}%` }}
+              />
+            </div>
+            <span className="text-xs text-slate-500 tabular-nums whitespace-nowrap">
+              {lotesProgreso.completado} / {lotesProgreso.total}
+            </span>
+          </div>
+        </div>
       )}
 
       {/* Resultado lotes */}

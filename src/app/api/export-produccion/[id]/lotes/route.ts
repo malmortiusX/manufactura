@@ -3,8 +3,10 @@
 // Registra los lotes de cada producto en ERP (tipo 403) para garantizar
 // que existan antes de crear la orden. Guarda los lotes creados en la
 // tabla LoteCreado para evitar intentos duplicados en futuros envíos.
+//
+// Responde con NDJSON streaming (una línea JSON por evento) para evitar
+// que nginx corte la conexión con 504 cuando hay muchos lotes.
 
-import { NextResponse }  from "next/server";
 import { auth }          from "@/lib/auth";
 import { prisma }        from "@/lib/prisma";
 import { headers }       from "next/headers";
@@ -38,16 +40,6 @@ function sumarDias(fechaYMD: string, dias: number): string {
 }
 
 // ── Construcción del texto de lotes (tipo 403) ────────────────────────────
-// Estructura por línea (522 chars):
-//   F_NUMERO_REG(7) F_TIPO_REG(4) F_SUBTIPO_REG(2) F_VERSION_REG(2)
-//   F_CIA(3) F_ACTUALIZA_REG(1)
-//   f403_id(15) f403_id_item(7) f403_referencia_item(50)
-//   f403_codigo_barras(20) f403_id_ext1_detalle(20) f403_id_ext2_detalle(20)
-//   f403_id_descripcion_tecnica(3) f403_ind_estado(1)
-//   f403_fecha_creacion(8) f403_fecha_vcto(8)
-//   f403_lote_prov(15) f403_id_tercero_prov(15) f403_id_sucursal_prov(3)
-//   f403_fabricante(40) f403_num_lote_fabricante(15) f403_fecha_manufactura(8)
-//   f403_notas(255)
 function buildXMLLotes(productos: ProductoLote[], fechaYMD: string): string {
   const fechaVcto = sumarDias(fechaYMD, 30);
   const opening   = "000000100000001001";
@@ -56,152 +48,201 @@ function buildXMLLotes(productos: ProductoLote[], fechaYMD: string): string {
     if (char.length !== 1) {
       throw new Error("El carácter de referencia debe ser exactamente un carácter");
     }
-
     let i = 0;
-    while (i < str.length && str[i] === char) {
-      i++;
-    }
-
+    while (i < str.length && str[i] === char) i++;
     return str.slice(i);
   }
 
   const lines = productos.map((p, i) =>
-    pN(i + 2, 7) +                    // F_NUMERO_REG  (2, 3, 4…)
-    pN(403,   4) +                    // F_TIPO_REG    = 403
-    pN(0,     2) +                    // F_SUBTIPO_REG = 00
-    pN(2,     2) +                    // F_VERSION_REG = 02
-    pN(1,     3) +                    // F_CIA         = 1
-    pN(0,     1) +                    // F_ACTUALIZA_REG = 0
-    pA(p.lote,    15) +               // f403_id (lote)
-    pN(0,      7) +                   // f403_id_item (vacío)
-    pA(trimStart(p.codigo, "0"),  50) +               // f403_referencia_item
-    pA("",        20) +               // f403_codigo_barras
-    pA("",        20) +               // f403_id_ext1_detalle
-    pA("",        20) +               // f403_id_ext2_detalle
-    pA("",         3) +               // f403_id_descripcion_tecnica
-    pN(1,      1) +                   // f403_ind_estado = 1
-    pA(fechaYMD,   8) +               // f403_fecha_creacion
-    pA(fechaVcto,  8) +               // f403_fecha_vcto (+30 días)
-    pA("",        15) +               // f403_lote_prov
-    pA("",        15) +               // f403_id_tercero_prov
-    pA("",         3) +               // f403_id_sucursal_prov
-    pA("",        40) +               // f403_fabricante
-    pA("",        15) +               // f403_num_lote_fabricante
-    pA("",         8) +               // f403_fecha_manufactura
-    pA("Creado por plano", 255)       // f403_notas
+    pN(i + 2, 7) +
+    pN(403,   4) +
+    pN(0,     2) +
+    pN(2,     2) +
+    pN(1,     3) +
+    pN(0,     1) +
+    pA(p.lote,    15) +
+    pN(0,      7) +
+    pA(trimStart(p.codigo, "0"),  50) +
+    pA("",        20) +
+    pA("",        20) +
+    pA("",        20) +
+    pA("",         3) +
+    pN(1,      1) +
+    pA(fechaYMD,   8) +
+    pA(fechaVcto,  8) +
+    pA("",        15) +
+    pA("",        15) +
+    pA("",         3) +
+    pA("",        40) +
+    pA("",        15) +
+    pA("",         8) +
+    pA("Creado por plano", 255)
   );
 
-  // Línea de cierre: N+2 (1 apertura + N productos + cierre)
   const closingNum = productos.length + 2;
   const closing = pN(closingNum, 7) + "9999" + "00" + "01" + "001";
 
   return [opening, ...lines, closing].join("\n");
 }
 
-// ── POST handler ───────────────────────────────────────────────────────────
+// ── POST handler (NDJSON streaming) ───────────────────────────────────────
 export async function POST(req: Request) {
-  try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
-    const body = await req.json() as { productos: ProductoLote[]; fecha: string };
-    const { productos, fecha } = body;
-
-    if (!productos?.length) {
-      return NextResponse.json({ error: "Falta la lista de productos" }, { status: 400 });
-    }
-    if (!fecha) {
-      return NextResponse.json({ error: "Falta la fecha (YYYYMMDD)" }, { status: 400 });
-    }
-
-    // ── 1. Filtrar los lotes que ya están registrados en nuestra DB ───────
-    const existentes = await prisma.loteCreado.findMany({
-      where: {
-        OR: productos.map((p) => ({
-          codigoProducto: p.codigo,
-          lote:           p.lote,
-        })),
-      },
-      select: { codigoProducto: true, lote: true },
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    return new Response(JSON.stringify({ error: "No autorizado" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
     });
-
-    const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
-    const omitidos = productos.filter((p) =>  existenteSet.has(`${p.codigo}|${p.lote}`));
-    const nuevos   = productos.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
-
-    // ── 2. Si todos ya existen, no hay nada que enviar ────────────────────
-    if (nuevos.length === 0) {
-      return NextResponse.json({
-        exitoso:      true,
-        omitidos,
-        nuevos:       [],
-        creados:      [],
-        errores:      [] as ErpError[],
-        respuestaRaw: "",
-        xmlLotes:     null,
-      });
-    }
-
-    // ── 3. Enviar un XML individual por lote al ERP (concurrencia limitada) ──
-    // Un XML por lote para que un "ya existe" no cancele el batch completo.
-    // Limitamos a 10 simultáneos para no saturar el ERP con 40 conexiones.
-    const LOTE_YA_EXISTE = "el lote que desea adicionar ya existe";
-    const CONCURRENCY    = 10;
-    const xmlsEnviados: string[] = [];
-    const creados:      ProductoLote[] = [];
-    const erroresReales: ErpError[]   = [];
-
-    type LoteResult = { lote: ProductoLote; xml: string; result: Awaited<ReturnType<typeof callSoap>> };
-    const tasks = nuevos.map((lote) => async (): Promise<LoteResult> => {
-      const xml    = buildXMLLotes([lote], fecha);
-      const result = await callSoap(xml);
-      return { lote, xml, result };
-    });
-
-    // Ejecuta `tasks` con un máximo de CONCURRENCY promesas activas a la vez
-    const settled: PromiseSettledResult<LoteResult>[] = new Array(tasks.length);
-    let idx = 0;
-    async function worker() {
-      while (idx < tasks.length) {
-        const i = idx++;
-        try   { settled[i] = { status: "fulfilled", value: await tasks[i]() }; }
-        catch (e) { settled[i] = { status: "rejected", reason: e }; }
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker));
-
-    for (const s of settled) {
-      if (s.status === "rejected") continue;
-      const { lote, xml, result } = s.value;
-      xmlsEnviados.push(xml);
-      const yaExiste = result.errores.some((e) =>
-        e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
-      );
-      if (result.exitoso || yaExiste) {
-        await prisma.loteCreado.upsert({
-          where:  { codigoProducto_lote: { codigoProducto: lote.codigo, lote: lote.lote } },
-          create: { codigoProducto: lote.codigo, lote: lote.lote },
-          update: {},
-        });
-        creados.push(lote);
-      } else {
-        erroresReales.push(...result.errores);
-      }
-    }
-
-    const xmlLotes = xmlsEnviados.join("\n\n");
-
-    return NextResponse.json({
-      exitoso:      erroresReales.length === 0,
-      omitidos,
-      nuevos,
-      creados,
-      errores:      erroresReales,
-      respuestaRaw: "",
-      xmlLotes,
-    });
-  } catch (err) {
-    console.error("[POST /api/export-produccion/[id]/lotes]", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
+
+  let body: { productos: ProductoLote[]; fecha: string };
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "JSON inválido" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const { productos, fecha } = body;
+
+  if (!productos?.length) {
+    return new Response(JSON.stringify({ error: "Falta la lista de productos" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (!fecha) {
+    return new Response(JSON.stringify({ error: "Falta la fecha (YYYYMMDD)" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        controller.enqueue(encoder.encode(JSON.stringify(data) + "\n"));
+      };
+
+      try {
+        // ── 1. Deduplicar input y filtrar los ya registrados en DB ─────────
+        const uniqueInput = Array.from(
+          new Map(productos.map((p) => [`${p.codigo}|${p.lote}`, p])).values()
+        );
+
+        const existentes = await prisma.loteCreado.findMany({
+          where: { OR: uniqueInput.map((p) => ({ codigoProducto: p.codigo, lote: p.lote })) },
+          select: { codigoProducto: true, lote: true },
+        });
+
+        const existenteSet = new Set(existentes.map((e) => `${e.codigoProducto}|${e.lote}`));
+        const omitidos = uniqueInput.filter((p) =>  existenteSet.has(`${p.codigo}|${p.lote}`));
+        const nuevos   = uniqueInput.filter((p) => !existenteSet.has(`${p.codigo}|${p.lote}`));
+
+        // ── 2. Si todos ya existen, responder de inmediato ─────────────────
+        if (nuevos.length === 0) {
+          send({
+            type:         "done",
+            exitoso:      true,
+            omitidos,
+            nuevos:       [],
+            creados:      [],
+            errores:      [] as ErpError[],
+            respuestaRaw: "",
+            xmlLotes:     null,
+          });
+          controller.close();
+          return;
+        }
+
+        send({ type: "start", total: nuevos.length });
+
+        // ── 3. Enviar un XML por lote con concurrencia limitada ────────────
+        const LOTE_YA_EXISTE = "el lote que desea adicionar ya existe";
+        const CONCURRENCY    = 10;
+
+        const xmlsEnviados:  string[]       = [];
+        const creados:       ProductoLote[] = [];
+        const erroresReales: ErpError[]     = [];
+        let   completado = 0;
+
+        type LoteResult = {
+          lote:   ProductoLote;
+          xml:    string;
+          result: Awaited<ReturnType<typeof callSoap>>;
+        };
+
+        const tasks = nuevos.map((lote) => async (): Promise<LoteResult> => {
+          const xml    = buildXMLLotes([lote], fecha);
+          const result = await callSoap(xml);
+          return { lote, xml, result };
+        });
+
+        const settled: PromiseSettledResult<LoteResult>[] = new Array(tasks.length);
+        let idx = 0;
+
+        async function worker() {
+          while (idx < tasks.length) {
+            const i = idx++;
+            try {
+              settled[i] = { status: "fulfilled", value: await tasks[i]() };
+            } catch (e) {
+              settled[i] = { status: "rejected", reason: e };
+            }
+            completado++;
+            send({ type: "progress", completado, total: nuevos.length });
+          }
+        }
+
+        await Promise.all(
+          Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker)
+        );
+
+        // ── 4. Persistir creados y recopilar errores ───────────────────────
+        for (const s of settled) {
+          if (s.status === "rejected") continue;
+          const { lote, xml, result } = s.value;
+          xmlsEnviados.push(xml);
+          const yaExiste = result.errores.some((e) =>
+            e.detalle.toLowerCase().includes(LOTE_YA_EXISTE)
+          );
+          if (result.exitoso || yaExiste) {
+            await prisma.loteCreado.upsert({
+              where:  { codigoProducto_lote: { codigoProducto: lote.codigo, lote: lote.lote } },
+              create: { codigoProducto: lote.codigo, lote: lote.lote },
+              update: {},
+            });
+            creados.push(lote);
+          } else {
+            erroresReales.push(...result.errores);
+          }
+        }
+
+        send({
+          type:         "done",
+          exitoso:      erroresReales.length === 0,
+          omitidos,
+          nuevos,
+          creados,
+          errores:      erroresReales,
+          respuestaRaw: "",
+          xmlLotes:     xmlsEnviados.length > 0 ? xmlsEnviados.join("\n\n") : null,
+        });
+
+      } catch (err) {
+        console.error("[POST /api/export-produccion/[id]/lotes]", err);
+        send({ type: "error", error: String(err) });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
+  });
 }
