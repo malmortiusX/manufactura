@@ -10,6 +10,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { leerLotesStream } from "@/lib/lotes-stream";
 
 interface ProductRow {
+  IDMVDCTO: number;
   UNIDAD_PRODUCTO: string;
   BODEGA: string;
   UBICACION: string;
@@ -1070,6 +1071,7 @@ export default function DesPreseDetailPage() {
       }));
 
       const rowsConsumoParaXml = rowsConsumoSeleccionadas.map((r) => ({
+        IDMVDCTO:        r.IDMVDCTO,
         CODIGO_PRODUCTO: r.CODIGO_PRODUCTO,
         LOTE_PRODUCTO:   r.LOTE_PRODUCTO ?? "",
         BODEGA:          r.BODEGA,

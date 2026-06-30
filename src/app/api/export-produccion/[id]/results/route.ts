@@ -52,6 +52,7 @@ const groupByOpg1 = `B.UNDBASE, B.CODIGO, B.bache`;
 
 // Columnas individuales (para consumo — sin GROUP BY)
 const selectColsIndividual = `
+  B.IDMVDCTO  AS IDMVDCTO,
   B.UNDBASE   AS UNIDAD_PRODUCTO,
   B.Bodega    AS BODEGA,
   B.codubica  AS UBICACION,

@@ -373,6 +373,7 @@ function buildXML2Consumo(
 
 // ── XML3 — Entrega de Producción EPG (tipo 450-01/470-02) ─────────────────
 interface RowXml3 {
+  IDMVDCTO?:       number;
   CODIGO_PRODUCTO: string;
   LOTE_PRODUCTO:   string;
   BODEGA:          string;
@@ -380,7 +381,6 @@ interface RowXml3 {
   UNIDAD_PRODUCTO: string;
   KIL:             number;
   UND:             number;
-  // Identificadores de registro en Mvdcto — usados para marcar el bache al transmitir
   NRODCTO?:        string;
   TIPODCTO?:       string;
   ORIGEN?:         string;
@@ -749,30 +749,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
 
     // ── Marcar en BD los registros de consumo seleccionados ──────────────────
-    // Solo se marcan los que el usuario seleccionó en la tabla Consumo OPG2.
-    // Los no seleccionados quedan con bache = 0/NULL y aparecerán disponibles
-    // la próxima vez que se ejecute el proceso.
+    // Se usa IDMVDCTO (PK de Mvdcto) para marcar exactamente las filas
+    // seleccionadas, evitando marcar otras filas del mismo documento.
     if (rowsConsumo.length > 0) {
-      const consumoClauses = rowsConsumo
-        .filter((r) => r.NRODCTO && r.TIPODCTO && r.ORIGEN)
-        .map((r) =>
-          `(B.Nrodcto  = '${s(r.NRODCTO)}'` +
-          ` AND B.Tipodcto = '${s(r.TIPODCTO)}'` +
-          ` AND B.Origen   = '${s(r.ORIGEN)}'` +
-          ` AND B.CODIGO   = '${s(r.CODIGO_PRODUCTO)}'` +
-          ` AND ISNULL(B.CODLOTE,'')   = '${s(r.LOTE_PRODUCTO)}'` +
-          ` AND B.Bodega   = '${s(r.BODEGA)}'` +
-          ` AND ISNULL(B.codubica,'')  = '${s(r.UBICACION ?? "")}')`
-        );
-      if (consumoClauses.length > 0) {
-        const updateBacheSql = `
-          UPDATE B
-          SET    B.bache = ${bache}
-          FROM   Mvdcto B
-          WHERE  (B.bache = 0 OR B.bache IS NULL)
-            AND  (${consumoClauses.join("\n            OR ")})
-        `;
-        await prisma.$executeRawUnsafe(updateBacheSql);
+      const ids = rowsConsumo
+        .map((r) => Number(r.IDMVDCTO))
+        .filter((id) => id > 0);
+      if (ids.length > 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE Mvdcto
+          SET    bache = ${bache}
+          WHERE  (bache = 0 OR bache IS NULL)
+            AND  IDMVDCTO IN (${ids.join(", ")})
+        `);
       }
     }
 

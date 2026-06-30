@@ -45,6 +45,7 @@ const selectColsOpg1 = `
 const groupByOpg1 = `B.UNDBASE, B.CODIGO, B.bache`;
 
 const selectColsIndividual = `
+  B.IDMVDCTO  AS IDMVDCTO,
   B.UNDBASE   AS UNIDAD_PRODUCTO,
   B.Bodega    AS BODEGA,
   B.codubica  AS UBICACION,
