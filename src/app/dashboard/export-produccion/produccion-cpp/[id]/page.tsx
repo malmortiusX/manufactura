@@ -352,13 +352,30 @@ function EstadoBadge({ estado }: { estado: EstadoDoc }) {
 
 // ── Panel de resultado de un documento ───────────────────────────────────
 function DocResultPanel({
-  label, result, onReintentar, retrying,
+  label, result, onReintentar, retrying, inProgress,
 }: {
   label: string;
   result: DocResult;
   onReintentar?: () => void;
   retrying?: boolean;
+  inProgress?: boolean;
 }) {
+  if (inProgress) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-slate-700">{label}</span>
+          <span className="text-xs font-semibold text-amber-600 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">En proceso</span>
+        </div>
+        <p className="text-xs text-amber-700 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Esperando respuesta del ERP…
+        </p>
+      </div>
+    );
+  }
   return (
     <div className={`rounded-xl border p-4 space-y-2 ${
       result.estado === "ENVIADO" ? "border-emerald-200 bg-emerald-50" :
@@ -416,17 +433,21 @@ function DocResultPanel({
 }
 
 // ── Panel de un OPG (3 documentos) ───────────────────────────────────────
-function OPGPanel({ titulo, num, result, accent, retrying, onReintentarOrden, onReintentarConsumo, onReintentarEntrega }: {
+function OPGPanel({ titulo, num, result, accent, retrying, activeDoc, prefix, onReintentarOrden, onReintentarConsumo, onReintentarEntrega }: {
   titulo: string;
   num: number;
   result: OPGResult;
   accent: string;
   retrying?: boolean;
+  activeDoc?: string | null;
+  prefix?: string;
   onReintentarOrden?:   () => void;
   onReintentarConsumo?: () => void;
   onReintentarEntrega?: () => void;
 }) {
-  const todoOk = result.orden.exitoso && result.consumo.exitoso && result.entrega.exitoso;
+  const todoOk   = result.orden.exitoso && result.consumo.exitoso && result.entrega.exitoso;
+  const hayError = result.orden.estado === "ERROR" || result.consumo.estado === "ERROR" || result.entrega.estado === "ERROR";
+  const enProceso = !todoOk && (activeDoc?.startsWith(prefix ?? "") ?? false);
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -446,20 +467,27 @@ function OPGPanel({ titulo, num, result, accent, retrying, onReintentarOrden, on
               </svg>
               Completo
             </span>
-          ) : (
+          ) : enProceso ? (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              En proceso…
+            </span>
+          ) : hayError ? (
             <span className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Con errores
             </span>
-          )
+          ) : null
         )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <DocResultPanel label="Orden de Producción" result={result.orden}   onReintentar={onReintentarOrden}   retrying={retrying} />
-        <DocResultPanel label="Consumo (SPG)"       result={result.consumo} onReintentar={onReintentarConsumo} retrying={retrying} />
-        <DocResultPanel label="Entrega (EPG)"       result={result.entrega} onReintentar={onReintentarEntrega} retrying={retrying} />
+        <DocResultPanel label="Orden de Producción" result={result.orden}   onReintentar={onReintentarOrden}   retrying={retrying} inProgress={activeDoc === `${prefix}.orden`} />
+        <DocResultPanel label="Consumo (SPG)"       result={result.consumo} onReintentar={onReintentarConsumo} retrying={retrying} inProgress={activeDoc === `${prefix}.consumo`} />
+        <DocResultPanel label="Entrega (EPG)"       result={result.entrega} onReintentar={onReintentarEntrega} retrying={retrying} inProgress={activeDoc === `${prefix}.entrega`} />
       </div>
     </div>
   );
@@ -780,6 +808,8 @@ export default function DesPreseDetailPage() {
   const [transmitResult, setTransmitResult] = useState<TransmitResult | null>(null);
   const [transmitError, setTransmitError]   = useState<string | null>(null);
   const [retrying, setRetrying]             = useState(false);
+  const [transmitPaso, setTransmitPaso]     = useState<string | null>(null);
+  const [liveResult, setLiveResult]         = useState<TransmitResult | null>(null);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
   const [lotesProgreso, setLotesProgreso]   = useState<{ completado: number; total: number } | null>(null);
   const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
@@ -802,6 +832,8 @@ export default function DesPreseDetailPage() {
     setError(null);
     setTransmitResult(null);
     setTransmitError(null);
+    setTransmitPaso(null);
+    setLiveResult(null);
     setLotesResult(null);
     setLotesProgreso(null);
     setXmlsPreview(null);
@@ -870,6 +902,8 @@ export default function DesPreseDetailPage() {
     setError(null);
     setTransmitResult(null);
     setTransmitError(null);
+    setTransmitPaso(null);
+    setLiveResult(null);
     setLotesResult(null);
     setLotesProgreso(null);
     setXmlsPreview(null);
@@ -978,6 +1012,8 @@ export default function DesPreseDetailPage() {
       setLotesProgreso(null);
     }
     setTransmitError(null);
+    setTransmitPaso(null);
+    setLiveResult(null);
 
     try {
       // ── Paso 1: Crear/verificar lotes (productos principales + consumo) ──
@@ -1099,11 +1135,41 @@ export default function DesPreseDetailPage() {
           prevConsecOpg2:  (transmitResult?.opg2Num ?? 0) > 0 ? transmitResult!.opg2Num : undefined,
         }),
       });
-      const text = await res.text();
-      if (!text) throw new Error("El servidor no devolvió respuesta");
-      const data = JSON.parse(text);
-      if (!res.ok) throw new Error(data.error ?? "Error al transmitir");
-      setTransmitResult(data);
+      if (!res.ok) {
+        const text = await res.text();
+        let errMsg = "Error al transmitir";
+        try { errMsg = JSON.parse(text).error ?? errMsg; } catch { errMsg = text || errMsg; }
+        throw new Error(errMsg);
+      }
+      if (!res.body) throw new Error("El servidor no devolvió cuerpo en la respuesta");
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let   buf     = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let msg: Record<string, unknown>;
+          try { msg = JSON.parse(trimmed); } catch { continue; }
+          if (msg.type === "step") {
+            setTransmitPaso(String(msg.msg ?? ""));
+          } else if (msg.type === "partialResult") {
+            setLiveResult(msg as unknown as TransmitResult);
+          } else if (msg.type === "done") {
+            setTransmitResult(msg as unknown as TransmitResult);
+            setLiveResult(null);
+            setTransmitPaso(null);
+          } else if (msg.type === "error") {
+            throw new Error(String(msg.error ?? "Error desconocido al transmitir"));
+          }
+        }
+      }
+      reader.releaseLock();
     } catch (err: unknown) {
       setTransmitError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -1113,6 +1179,23 @@ export default function DesPreseDetailPage() {
   }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1, transmitResult, isResumeMode]);
 
   const tr = transmitResult;
+
+  // Resultado a mostrar: liveResult durante la transmisión, transmitResult cuando termina
+  const displayResult = (transmitting || retrying) ? (liveResult ?? transmitResult) : transmitResult;
+
+  // Doc activo durante la transmisión (basado en el paso actual)
+  const activeDoc = (() => {
+    const p = transmitPaso ?? "";
+    if (p.includes("OPG1 al ERP"))                      return "opg1.orden";
+    if (p.includes("OPG2 al ERP"))                      return "opg2.orden";
+    if (p.includes("existencias OPG2") || p.includes("consumo OPG2")) return "opg2.consumo";
+    if (p.includes("entrega OPG2"))                     return "opg2.entrega";
+    if (p.includes("existencias OPG1") || p.includes("consumo OPG1")) return "opg1.consumo";
+    if (p.includes("entrega OPG1"))                     return "opg1.entrega";
+    return null;
+  })();
+
+  const PDOC: DocResult = { exitoso: false, errores: [], estado: "PENDIENTE" };
 
   // Suprimir advertencia de variable no usada
   void PENDIENTE_OPG;
@@ -1190,7 +1273,7 @@ export default function DesPreseDetailPage() {
                   <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  Transmitiendo…
+                  {transmitPaso ?? "Transmitiendo…"}
                 </>
               ) : (
                 <>
@@ -1268,41 +1351,43 @@ export default function DesPreseDetailPage() {
         </div>
       )}
 
-      {/* Resultados transmisión */}
-      {tr && (
+      {/* Resultados transmisión (live durante envío, final cuando termina) */}
+      {displayResult && (
         <div className="space-y-4">
           {/* OPG2 — subproductos PP */}
-          {tr.opg2Num > 0 && (
+          {displayResult.opg2Num > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 px-1">
                 <div className="h-px flex-1 bg-orange-200" />
                 <span className="text-xs font-semibold text-orange-500 uppercase tracking-wider px-2">
-                  Fase 1 · Subproductos PI ({tr.ppItems.map((p) => p.codigo).join(", ")})
+                  Fase 1 · Subproductos PI ({(displayResult.ppItems ?? []).map((p) => p.codigo).join(", ")})
                 </span>
                 <div className="h-px flex-1 bg-orange-200" />
               </div>
               <OPGPanel
                 titulo="OPG2 — Subproductos"
-                num={tr.opg2Num}
-                result={tr.opg2}
+                num={displayResult.opg2Num}
+                result={displayResult.opg2 ?? { orden: PDOC, consumo: PDOC, entrega: PDOC }}
                 accent="bg-orange-50 text-orange-600 border-orange-200"
                 retrying={retrying}
+                activeDoc={activeDoc}
+                prefix="opg2"
                 onReintentarOrden={
-                  !tr.opg2.orden.exitoso && tr.opg1.orden.exitoso
+                  tr && !tr.opg2.orden.exitoso && tr.opg1.orden.exitoso
                     ? () => transmitir(true) : undefined
                 }
                 onReintentarConsumo={
-                  !tr.opg2.consumo.exitoso && tr.opg2.orden.exitoso &&
+                  tr && !tr.opg2.consumo.exitoso && tr.opg2.orden.exitoso &&
                   !tr.existenciaCheckOpg2
                     ? () => transmitir(true) : undefined
                 }
                 onReintentarEntrega={
-                  !tr.opg2.entrega.exitoso && tr.opg2.consumo.exitoso
+                  tr && !tr.opg2.entrega.exitoso && tr.opg2.consumo.exitoso
                     ? () => transmitir(true) : undefined
                 }
               />
               {/* Panel de existencias insuficientes — bloquea el SPG OPG2 */}
-              {tr.existenciaCheckOpg2 && !tr.existenciaCheckOpg2.suficiente && (
+              {tr?.existenciaCheckOpg2 && !tr.existenciaCheckOpg2.suficiente && (
                 <ExistenciaCheckPanel
                   titulo="Verificación de existencias OPG2"
                   check={tr.existenciaCheckOpg2}
@@ -1324,27 +1409,29 @@ export default function DesPreseDetailPage() {
             </div>
             <OPGPanel
               titulo="OPG1 — Productos filtrados"
-              num={tr.opg1Num}
-              result={tr.opg1}
+              num={displayResult.opg1Num}
+              result={displayResult.opg1 ?? { orden: PDOC, consumo: PDOC, entrega: PDOC }}
               accent="bg-amber-50 text-amber-600 border-amber-200"
               retrying={retrying}
+              activeDoc={activeDoc}
+              prefix="opg1"
               onReintentarOrden={
-                !tr.opg1.orden.exitoso
+                tr && !tr.opg1.orden.exitoso
                   ? () => transmitir(true) : undefined
               }
               onReintentarConsumo={
-                !tr.opg1.consumo.exitoso && tr.opg1.orden.exitoso &&
+                tr && !tr.opg1.consumo.exitoso && tr.opg1.orden.exitoso &&
                 (tr.opg2Num === 0 || tr.opg2.entrega.exitoso) &&
                 !tr.existenciaCheck
                   ? () => transmitir(true) : undefined
               }
               onReintentarEntrega={
-                !tr.opg1.entrega.exitoso && tr.opg1.consumo.exitoso
+                tr && !tr.opg1.entrega.exitoso && tr.opg1.consumo.exitoso
                   ? () => transmitir(true) : undefined
               }
             />
             {/* Panel de existencias insuficientes — bloquea el SPG OPG1 */}
-            {tr.existenciaCheck && !tr.existenciaCheck.suficiente && (
+            {tr?.existenciaCheck && !tr.existenciaCheck.suficiente && (
               <ExistenciaCheckPanel
                 check={tr.existenciaCheck}
                 onReverificar={() => transmitir(true)}
@@ -1353,8 +1440,8 @@ export default function DesPreseDetailPage() {
             )}
           </div>
 
-          {/* XMLs generados en la transmisión */}
-          <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} opg2Num={tr.opg2Num} xmlsPreview={xmlsPreview} />
+          {/* XMLs generados en la transmisión — solo al finalizar */}
+          {tr && <XmlsGenerados xmls={tr.xmls} opg1Num={tr.opg1Num} opg2Num={tr.opg2Num} xmlsPreview={xmlsPreview} />}
         </div>
       )}
 

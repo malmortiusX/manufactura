@@ -651,54 +651,61 @@ const PENDIENTE: DocResult = { exitoso: false, printTipoError: -1, errores: [], 
 
 // ── POST handler ───────────────────────────────────────────────────────────
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { id } = await params;
+  const filtroId = Number(id);
+
+  const filtro = await prisma.exportProduccion.findUnique({ where: { id: filtroId } });
+  if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
+
+  const body = await req.json() as {
+    bache:            number;
+    consecOpg1:       number;
+    xml1:             string;
+    lotesPorProducto: Record<string, string>;
+    rows:             RowXml3[];
+    rowsConsumo:      RowXml3[];
+    logId1?:          number;
+    logId2?:          number;
+    prevConsecOpg2?:  number;
+  };
+  const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [], logId1,
+          logId2: bodyLogId2, prevConsecOpg2 } = body;
+
+  const ccostoConsumo    = filtro.ccostoConsumo?.trim()    ?? "";
+  const ccostoEntrega    = filtro.ccostoEntrega?.trim()    ?? "";
+  const unNegocioConsumo = filtro.unNegocioConsumo?.trim() ?? "";
+  const unNegocioEntrega = filtro.unNegocioEntrega?.trim() ?? "";
+
+  if (!bache)      return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
+  if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
+
+  const fechaYMD = (raw: Date | string): string => {
+    const s = typeof raw === "string" ? raw : raw.toISOString();
+    return s.slice(0, 10).replace(/-/g, "");
+  };
+  const fecha = fechaYMD(filtro.fecha);
+  const co    = filtro.centroOperacion?.trim() ?? "";
+
+  const _fy    = parseInt(fecha.slice(0, 4), 10);
+  const _fm    = parseInt(fecha.slice(4, 6), 10);
+  const _fd    = parseInt(fecha.slice(6, 8), 10);
+  const _dia   = Math.round((new Date(_fy, _fm - 1, _fd).getTime() - new Date(_fy, 0, 1).getTime()) / 86_400_000) + 1;
+  const loteJul = String(_dia).padStart(3, "0") + String(_fy).slice(-2);
+
+  const ppCodigo    = filtro.productoProceso?.trim() ?? "";
+  const PP_CODIGOS  = ppCodigo ? [ppCodigo] : [];
+  const PP_CON_LOTE = ppCodigo ? [ppCodigo] : [];
+
+  const encoder = new TextEncoder();
+  let   _ctrl!: ReadableStreamDefaultController<Uint8Array>;
+  const send = (d: object) => _ctrl.enqueue(encoder.encode(JSON.stringify(d) + "\n"));
+  const stream = new ReadableStream<Uint8Array>({ start(c) { _ctrl = c; } });
+
+  void (async () => {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-
-    const { id } = await params;
-    const filtroId = Number(id);
-
-    const filtro = await prisma.exportProduccion.findUnique({ where: { id: filtroId } });
-    if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
-
-    const body = await req.json() as {
-      bache:            number;
-      consecOpg1:       number;
-      xml1:             string;
-      lotesPorProducto: Record<string, string>;
-      rows:             RowXml3[];
-      rowsConsumo:      RowXml3[];
-      logId1?:          number;
-      logId2?:          number;
-      prevConsecOpg2?:  number;
-    };
-    const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [], logId1,
-            logId2: bodyLogId2, prevConsecOpg2 } = body;
-
-    const ccostoConsumo    = filtro.ccostoConsumo?.trim()    ?? "";
-    const ccostoEntrega    = filtro.ccostoEntrega?.trim()    ?? "";
-    const unNegocioConsumo = filtro.unNegocioConsumo?.trim() ?? "";
-    const unNegocioEntrega = filtro.unNegocioEntrega?.trim() ?? "";
-
-    if (!bache)     return NextResponse.json({ error: "Falta el número de lote (bache)" },  { status: 400 });
-    if (!consecOpg1) return NextResponse.json({ error: "Falta consecOpg1" }, { status: 400 });
-
-    const fechaYMD = (raw: Date | string): string => {
-      const s = typeof raw === "string" ? raw : raw.toISOString();
-      return s.slice(0, 10).replace(/-/g, "");
-    };
-    const fecha = fechaYMD(filtro.fecha);
-    const co    = filtro.centroOperacion?.trim() ?? "";
-
-    const _fy    = parseInt(fecha.slice(0, 4), 10);
-    const _fm    = parseInt(fecha.slice(4, 6), 10);
-    const _fd    = parseInt(fecha.slice(6, 8), 10);
-    const _dia   = Math.round((new Date(_fy, _fm - 1, _fd).getTime() - new Date(_fy, 0, 1).getTime()) / 86_400_000) + 1;
-    const loteJul = String(_dia).padStart(3, "0") + String(_fy).slice(-2);
-
-    const ppCodigo   = filtro.productoProceso?.trim() ?? "";
-    const PP_CODIGOS = ppCodigo ? [ppCodigo] : [];
-    const PP_CON_LOTE = ppCodigo ? [ppCodigo] : [];
 
     // ── Crear o reutilizar log inicial OPG1 ───────────────────────────────
     // Si logId1 viene del cliente, el log ya fue creado al marcar el bache
@@ -793,17 +800,39 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const mkErr = (e: unknown): DocResult =>
       ({ exitoso: false, printTipoError: -1, errores: [], respuestaRaw: String(e) });
 
+    const _d = (r: DocResult, depOk: boolean) => ({
+      exitoso: r.exitoso, errores: r.errores, respuestaRaw: r.respuestaRaw,
+      estado: r.exitoso ? "ENVIADO" : r.printTipoError === -1 && !r.respuestaRaw ? "PENDIENTE" : depOk ? "ERROR" : "PENDIENTE",
+    });
+    const sendPartial = () => send({ type: "partialResult",
+      logId1: log1Id, logId2: log2Id || null,
+      opg1Num: consecOpg1, opg2Num: consecOpg2,
+      opg1: {
+        orden:   _d(ordenOpg1Result,   true),
+        consumo: _d(consumoOpg1Result,  ordenOpg1Result.exitoso),
+        entrega: _d(entregaOpg1Result,  consumoOpg1Result.exitoso),
+      },
+      opg2: log2Id > 0 ? {
+        orden:   _d(ordenOpg2Result,   true),
+        consumo: _d(consumoOpg2Result,  ordenOpg2Result.exitoso),
+        entrega: _d(entregaOpg2Result,  consumoOpg2Result.exitoso),
+      } : null,
+    });
+
     // ── Paso 1: Enviar XML1 → OPG1 (saltar si ya fue enviado) ────────────
+    send({ type: "step", paso: 1, msg: "Enviando OPG1 al ERP…" });
     if (log1State?.estadoOrdenProduccion === "ENVIADO") {
       ordenOpg1Result = skip(log1State.respuestaOrdenProduccion);
     } else {
       try { ordenOpg1Result = await callSoap(xml1); }
       catch (e) { ordenOpg1Result = mkErr(e); }
     }
+    sendPartial();
 
     if (ordenOpg1Result.exitoso) {
 
       // ── Paso 2: Consultar componentes de OPG1 + calcular ppItems ─────────
+      send({ type: "step", paso: 2, msg: "Consultando componentes OPG1…" });
       try {
         opg1Componentes = await queryComponentesOP(co, "OPG", consecOpg1);
 
@@ -852,6 +881,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
         // ── Paso 2b: Crear lotes PP (después de OPG1, antes de OPG2) ───────
         if (ppItems.length > 0) {
+          send({ type: "step", paso: 3, msg: "Creando lotes de subproductos…" });
           try {
             const ppLotes: ProductoLote[] = ppItems.map((p) => ({ codigo: p.codigo, lote: p.lote }));
             const existentes = await prisma.loteCreado.findMany({
@@ -897,12 +927,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         }
 
         // Enviar orden OPG2 (o saltar si ya fue enviada)
+        send({ type: "step", paso: 4, msg: "Enviando OPG2 al ERP…" });
         if (log2State?.estadoOrdenProduccion === "ENVIADO") {
           ordenOpg2Result = skip(log2State.respuestaOrdenProduccion);
         } else {
           try { ordenOpg2Result = await callSoap(xml1b); }
           catch (e) { ordenOpg2Result = mkErr(e); }
         }
+        sendPartial();
 
         if (ordenOpg2Result.exitoso) {
 
@@ -914,6 +946,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           if (log2State?.estadoConsumoProduccion === "ENVIADO") {
             consumoOpg2Result = skip(log2State.respuestaConsumoProduccion);
           } else {
+            send({ type: "step", paso: 5, msg: "Verificando existencias OPG2…" });
             try {
               if (rowsConsumo.length > 0) {
                 const bodegaConsulta = filtro.bodegaItemPadre?.trim() ?? "";
@@ -1034,6 +1067,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                     unNegocioConsumo,
                   );
                   await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
+                  send({ type: "step", paso: 6, msg: "Enviando consumo OPG2 (SPG)…" });
                   consumoOpg2Result = await callSoap(xml2b);
                 }
               } else {
@@ -1045,6 +1079,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               }
             } catch (e) { consumoOpg2Result = mkErr(e); }
           }
+          sendPartial();
 
           if (consumoOpg2Result.exitoso) {
 
@@ -1086,12 +1121,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             if (log2State?.estadoEntregaProduccion === "ENVIADO") {
               entregaOpg2Result = skip(log2State.respuestaEntregaProduccion);
             } else {
+              send({ type: "step", paso: 7, msg: "Enviando entrega OPG2 (EPG)…" });
               try {
                 xml3b = buildXML3b(co, filtro.nombre, fecha, consecOpg2, rowsPP, filtro.bodegaItemPadre, ppCodigo, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega, unNegocioEntrega);
                 await prisma.opgLog.update({ where: { id: log2Id }, data: { xml3: xml3b } });
                 entregaOpg2Result = await callSoap(xml3b);
               } catch (e) { entregaOpg2Result = mkErr(e); }
             }
+            sendPartial();
 
             // Solo si EPG OPG2 fue exitosa se puede continuar con OPG1
             if (entregaOpg2Result.exitoso) {
@@ -1122,6 +1159,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (log1State?.estadoConsumoProduccion === "ENVIADO") {
           consumoOpg1Result = skip(log1State.respuestaConsumoProduccion);
         } else {
+          send({ type: "step", paso: 8, msg: "Verificando existencias OPG1…" });
           try {
             const componentes1ToConsume = opg1Componentes.filter((c) => c.cantidadPendiente1 > 0);
 
@@ -1304,22 +1342,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 xml2 = buildXML2(co, filtro.nombre, fecha, consecOpg1, componentes1ToConsume, PP_CON_LOTE, filtro.motivoConsumo?.trim() ?? "", ccostoConsumo, unNegocioConsumo);
               }
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml2 } });
+              send({ type: "step", paso: 9, msg: "Enviando consumo OPG1 (SPG)…" });
               consumoOpg1Result = await callSoap(xml2);
             }
           } catch (e) { consumoOpg1Result = mkErr(e); }
         }
+        sendPartial();
 
         // ── Paso 7: EPG OPG1 (saltar si ya fue enviado) ───────────────────
         if (consumoOpg1Result.exitoso) {
           if (log1State?.estadoEntregaProduccion === "ENVIADO") {
             entregaOpg1Result = skip(log1State.respuestaEntregaProduccion);
           } else {
+            send({ type: "step", paso: 10, msg: "Enviando entrega OPG1 (EPG)…" });
             try {
               xml3 = buildXML3(co, filtro.nombre, fecha, consecOpg1, rows, filtro.bodegaItemPadre, filtro.motivoEntrega?.trim() ?? "", ccostoEntrega, unNegocioEntrega);
               await prisma.opgLog.update({ where: { id: log1Id }, data: { xml3 } });
               entregaOpg1Result = await callSoap(xml3);
             } catch (e) { entregaOpg1Result = mkErr(e); }
           }
+          sendPartial();
         }
       }
 
@@ -1373,7 +1415,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       respuestaRaw: r.respuestaRaw,
     });
 
-    return NextResponse.json({
+    send({ type: "done",
       logId1:    log1Id,
       logId2:    log2Id || null,
       opg1Num:   consecOpg1,
@@ -1395,6 +1437,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   } catch (err) {
     console.error("[POST /api/export-produccion/[id]/transmit-desprese]", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    send({ type: "error", error: String(err) });
+  } finally {
+    _ctrl.close();
   }
+  })();
+
+  return new Response(stream, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
+  });
 }
