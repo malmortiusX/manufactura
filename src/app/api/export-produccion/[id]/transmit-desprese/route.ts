@@ -661,18 +661,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!filtro) return NextResponse.json({ error: "Filtro no encontrado" }, { status: 404 });
 
   const body = await req.json() as {
-    bache:            number;
-    consecOpg1:       number;
-    xml1:             string;
-    lotesPorProducto: Record<string, string>;
-    rows:             RowXml3[];
-    rowsConsumo:      RowXml3[];
-    logId1?:          number;
-    logId2?:          number;
-    prevConsecOpg2?:  number;
+    bache:                number;
+    consecOpg1:           number;
+    xml1:                 string;
+    lotesPorProducto:     Record<string, string>;
+    rows:                 RowXml3[];
+    rowsConsumo:          RowXml3[];
+    logId1?:              number;
+    logId2?:              number;
+    prevConsecOpg2?:      number;
+    confirmedConsumoOpg2?: RowXml3[];
   };
   const { bache, consecOpg1, xml1, lotesPorProducto = {}, rows = [], rowsConsumo = [], logId1,
-          logId2: bodyLogId2, prevConsecOpg2 } = body;
+          logId2: bodyLogId2, prevConsecOpg2, confirmedConsumoOpg2 } = body;
 
   const ccostoConsumo    = filtro.ccostoConsumo?.trim()    ?? "";
   const ccostoEntrega    = filtro.ccostoEntrega?.trim()    ?? "";
@@ -945,6 +946,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           // antiguo primero) para construir el XML de consumo.
           if (log2State?.estadoConsumoProduccion === "ENVIADO") {
             consumoOpg2Result = skip(log2State.respuestaConsumoProduccion);
+          } else if (confirmedConsumoOpg2 && confirmedConsumoOpg2.length > 0) {
+            // El usuario ya revisó y confirmó — usar filas directamente sin recalcular FIFO
+            send({ type: "step", paso: 6, msg: "Enviando consumo OPG2 (SPG)…" });
+            try {
+              xml2b = buildXML2Consumo(
+                co, filtro.nombre, fecha, consecOpg2,
+                confirmedConsumoOpg2,
+                filtro.bodegaItemPadre?.trim() ?? "",
+                ppCodigo,
+                filtro.motivoConsumo?.trim() ?? "",
+                ccostoConsumo,
+                unNegocioConsumo,
+              );
+              await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
+              consumoOpg2Result = await callSoap(xml2b);
+            } catch (e) { consumoOpg2Result = mkErr(e); }
           } else {
             send({ type: "step", paso: 5, msg: "Verificando existencias OPG2…" });
             try {
@@ -1057,18 +1074,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                     }
                   }
 
-                  xml2b = buildXML2Consumo(
-                    co, filtro.nombre, fecha, consecOpg2,
+                  // Pausar para revisión del usuario antes de enviar el SPG
+                  await prisma.opgLog.update({
+                    where: { id: log1Id },
+                    data: { estadoOrdenProduccion: "ENVIADO", respuestaOrdenProduccion: ordenOpg1Result.respuestaRaw, intentos: { increment: 1 } },
+                  });
+                  await prisma.opgLog.update({
+                    where: { id: log2Id },
+                    data: { estadoOrdenProduccion: "ENVIADO", respuestaOrdenProduccion: ordenOpg2Result.respuestaRaw, intentos: { increment: 1 } },
+                  });
+                  send({ type: "reviewConsumo",
+                    logId1: log1Id, logId2: log2Id,
+                    opg1Num: consecOpg1, opg2Num: consecOpg2,
                     fifoRows,
-                    bodegaConsulta,
-                    ppCodigo,
-                    filtro.motivoConsumo?.trim() ?? "",
-                    ccostoConsumo,
-                    unNegocioConsumo,
-                  );
-                  await prisma.opgLog.update({ where: { id: log2Id }, data: { xml2: xml2b } });
-                  send({ type: "step", paso: 6, msg: "Enviando consumo OPG2 (SPG)…" });
-                  consumoOpg2Result = await callSoap(xml2b);
+                  });
+                  return;
                 }
               } else {
                 // Sin registros seleccionados: usar componentes del ERP (fallback)

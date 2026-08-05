@@ -114,6 +114,15 @@ interface RowOpg1 {
 
 interface ProductoLote { codigo: string; lote: string; }
 
+interface ConsumoRow {
+  CODIGO_PRODUCTO: string;
+  LOTE_PRODUCTO:   string;
+  BODEGA:          string;
+  UNIDAD_PRODUCTO: string;
+  KIL:             number;
+  UND:             number;
+}
+
 interface LoteCreacionResult {
   exitoso:      boolean;
   omitidos:     ProductoLote[];
@@ -685,6 +694,86 @@ function ExistenciaCheckPanel({
   );
 }
 
+// ── Panel de revisión de consumo OPG2 ────────────────────────────────────
+function ConsumoOpg2ReviewPanel({
+  rows, opg2Num, onConfirmar, retrying,
+}: {
+  rows:        ConsumoRow[];
+  opg2Num:     number;
+  onConfirmar: () => void;
+  retrying:    boolean;
+}) {
+  const totalKil = rows.reduce((s, r) => s + Number(r.KIL), 0);
+  const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
+
+  return (
+    <div className="bg-white rounded-2xl border border-blue-200 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-blue-100 bg-blue-50">
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+            Verificación de consumo OPG2 #{opg2Num}
+          </span>
+        </div>
+        <button
+          onClick={onConfirmar}
+          disabled={retrying}
+          className="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <svg className={`w-3.5 h-3.5 ${retrying ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {retrying
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            }
+          </svg>
+          {retrying ? "Enviando…" : "Confirmar y continuar"}
+        </button>
+      </div>
+      <div className="p-4 space-y-3">
+        <p className="text-xs text-blue-700">
+          Revise los artículos y cantidades que se consumirán en la OPG2. Las órdenes de producción ya fueron enviadas al ERP.
+          Presione <strong>Confirmar y continuar</strong> para enviar el consumo (SPG).
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Código</th>
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Lote</th>
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Bodega</th>
+                <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">U/M</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Kilogramos</th>
+                <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase tracking-wide">Unidades</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row, i) => (
+                <tr key={i} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono text-slate-700">{row.CODIGO_PRODUCTO}</td>
+                  <td className="px-3 py-2 text-slate-600">{row.LOTE_PRODUCTO || <span className="italic text-slate-400">sin lote</span>}</td>
+                  <td className="px-3 py-2 text-slate-600">{row.BODEGA || "—"}</td>
+                  <td className="px-3 py-2 text-slate-600">{row.UNIDAD_PRODUCTO}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium">{fmtNum(Number(row.KIL))}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-700 font-medium">{fmtNum(Number(row.UND))}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-200 bg-slate-50">
+                <td colSpan={4} className="px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Total</td>
+                <td className="px-3 py-2 text-right font-bold text-slate-800 tabular-nums">{fmtNum(totalKil)}</td>
+                <td className="px-3 py-2 text-right font-bold text-slate-800 tabular-nums">{fmtNum(totalUnd)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Panel colapsable de XMLs previos a la transmisión ────────────────────
 function XmlsPreview({ xmlLotes, xml1 }: { xmlLotes: string; xml1: string }) {
   const [open, setOpen] = useState(false);
@@ -810,6 +899,11 @@ export default function DesPreseDetailPage() {
   const [retrying, setRetrying]             = useState(false);
   const [transmitPaso, setTransmitPaso]     = useState<string | null>(null);
   const [liveResult, setLiveResult]         = useState<TransmitResult | null>(null);
+  const [pendingConsumoReview, setPendingConsumoReview] = useState<{
+    fifoRows: ConsumoRow[];
+    logId2:   number;
+    opg2Num:  number;
+  } | null>(null);
   const [lotesResult, setLotesResult]       = useState<LoteCreacionResult | null>(null);
   const [lotesProgreso, setLotesProgreso]   = useState<{ completado: number; total: number } | null>(null);
   const [xmlsPreview, setXmlsPreview]       = useState<{ xmlLotes: string; xml1: string } | null>(null);
@@ -834,6 +928,7 @@ export default function DesPreseDetailPage() {
     setTransmitError(null);
     setTransmitPaso(null);
     setLiveResult(null);
+    setPendingConsumoReview(null);
     setLotesResult(null);
     setLotesProgreso(null);
     setXmlsPreview(null);
@@ -904,6 +999,7 @@ export default function DesPreseDetailPage() {
     setTransmitError(null);
     setTransmitPaso(null);
     setLiveResult(null);
+    setPendingConsumoReview(null);
     setLotesResult(null);
     setLotesProgreso(null);
     setXmlsPreview(null);
@@ -993,7 +1089,7 @@ export default function DesPreseDetailPage() {
   const totalUnd = rows.reduce((s, r) => s + Number(r.UND), 0);
 
 
-  const transmitir = useCallback(async (esReintento = false) => {
+  const transmitir = useCallback(async (esReintento = false, confirmedConsumoOpg2?: ConsumoRow[]) => {
     if (!bache || !filtro) return;
 
     // Filas de consumo seleccionadas por el usuario
@@ -1004,16 +1100,19 @@ export default function DesPreseDetailPage() {
       return;
     }
 
-    if (esReintento) setRetrying(true);
-    else {
+    if (esReintento) {
+      setRetrying(true);
+      setPendingConsumoReview(null);
+    } else {
       setTransmitting(true);
       setTransmitResult(null);
+      setLiveResult(null);
       setLotesResult(null);
       setLotesProgreso(null);
+      setPendingConsumoReview(null);
     }
     setTransmitError(null);
     setTransmitPaso(null);
-    setLiveResult(null);
 
     try {
       // ── Paso 1: Crear/verificar lotes (productos principales + consumo) ──
@@ -1125,14 +1224,15 @@ export default function DesPreseDetailPage() {
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           bache,
-          consecOpg1:      nuevoConsec1,
-          xml1:            xml1Final,
+          consecOpg1:           nuevoConsec1,
+          xml1:                 xml1Final,
           lotesPorProducto,
-          rows:            rowsParaXml3,
-          rowsConsumo:     rowsConsumoParaXml,
-          logId1:          logId1              ?? undefined,
-          logId2:          transmitResult?.logId2          ?? undefined,
-          prevConsecOpg2:  (transmitResult?.opg2Num ?? 0) > 0 ? transmitResult!.opg2Num : undefined,
+          rows:                 rowsParaXml3,
+          rowsConsumo:          rowsConsumoParaXml,
+          logId1:               logId1              ?? undefined,
+          logId2:               transmitResult?.logId2          ?? undefined,
+          prevConsecOpg2:       (transmitResult?.opg2Num ?? 0) > 0 ? transmitResult!.opg2Num : undefined,
+          confirmedConsumoOpg2: confirmedConsumoOpg2 ?? undefined,
         }),
       });
       if (!res.ok) {
@@ -1160,6 +1260,13 @@ export default function DesPreseDetailPage() {
             setTransmitPaso(String(msg.msg ?? ""));
           } else if (msg.type === "partialResult") {
             setLiveResult(msg as unknown as TransmitResult);
+          } else if (msg.type === "reviewConsumo") {
+            setPendingConsumoReview({
+              fifoRows: (msg.fifoRows as ConsumoRow[]) ?? [],
+              logId2:   Number(msg.logId2),
+              opg2Num:  Number(msg.opg2Num),
+            });
+            setTransmitPaso(null);
           } else if (msg.type === "done") {
             setTransmitResult(msg as unknown as TransmitResult);
             setLiveResult(null);
@@ -1176,12 +1283,12 @@ export default function DesPreseDetailPage() {
       setTransmitting(false);
       setRetrying(false);
     }
-  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1, transmitResult, isResumeMode]);
+  }, [id, bache, filtro, rows, rowsConsumo, rowsOpg1, selectedConsumoIdx, consecOpg1, logId1, transmitResult, isResumeMode, setPendingConsumoReview]);
 
   const tr = transmitResult;
 
-  // Resultado a mostrar: liveResult durante la transmisión, transmitResult cuando termina
-  const displayResult = (transmitting || retrying) ? (liveResult ?? transmitResult) : transmitResult;
+  // Resultado a mostrar: liveResult durante la transmisión o revisión pendiente, transmitResult cuando termina
+  const displayResult = (transmitting || retrying || !!pendingConsumoReview) ? (liveResult ?? transmitResult) : transmitResult;
 
   // Doc activo durante la transmisión (basado en el paso actual)
   const activeDoc = (() => {
@@ -1393,6 +1500,15 @@ export default function DesPreseDetailPage() {
                   check={tr.existenciaCheckOpg2}
                   onReverificar={() => transmitir(true)}
                   loading={retrying}
+                />
+              )}
+              {/* Panel de revisión de consumo OPG2 — pausa antes de enviar SPG */}
+              {pendingConsumoReview && (
+                <ConsumoOpg2ReviewPanel
+                  rows={pendingConsumoReview.fifoRows}
+                  opg2Num={pendingConsumoReview.opg2Num}
+                  onConfirmar={() => transmitir(true, pendingConsumoReview.fifoRows)}
+                  retrying={retrying}
                 />
               )}
             </div>
