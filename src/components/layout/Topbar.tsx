@@ -4,7 +4,7 @@ import { useSession } from "@/lib/auth-client";
 import { usePathname } from "next/navigation";
 
 const pageTitles: Record<string, string> = {
-  "/dashboard":                                          "Dashboard",
+  "/dashboard":                                          "Dashboard TEST",
   "/dashboard/employees":                                "Empleados",
   "/dashboard/users":                                    "Usuarios",
   "/dashboard/reports":                                  "Reportes",
