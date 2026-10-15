@@ -4,8 +4,15 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./prisma";
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL,
-  basePath: (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + "/api/auth",
+  baseURL: process.env.BETTER_AUTH_URL
+    ? new URL(process.env.BETTER_AUTH_URL).origin
+    : undefined,
+  basePath: "/api/auth",
+  trustedOrigins: [
+    ...(process.env.BETTER_AUTH_URL ? [new URL(process.env.BETTER_AUTH_URL).origin] : []),
+    ...(process.env.NEXT_PUBLIC_APP_URL ? [process.env.NEXT_PUBLIC_APP_URL] : []),
+    ...(process.env.NEXT_PUBLIC_APP_URL ? [process.env.NEXT_PUBLIC_APP_URL + ":3001"] : []),
+  ],
   database: prismaAdapter(prisma, {
     provider: "sqlserver",
   }),
